@@ -7,7 +7,7 @@ type: "page"
 draft: false 
 ---
 
-**Last Updated: February 12, 2026**
+**Last Updated: February 11, 2026**
 
 At **dother.biz.id** ("we," "us," or "our"), one of our main priorities is the privacy of our visitors. This Privacy Policy document contains types of information that is collected and recorded by dother.biz.id and how we use it.
 
