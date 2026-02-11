@@ -4,8 +4,7 @@ description: "Our commitment to technical accuracy, journalistic integrity, and 
 date: 2026-02-12
 layout: "page"
 type: "page"
-draft: false
-disable_ads: true
+draft: false 
 ---
 
 ## 1. Commitment to Technical Accuracy
