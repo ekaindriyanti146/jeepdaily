@@ -1,33 +1,36 @@
 ---
 title: "About Us"
-description: "dother.biz.id is the premier digital garage for Jeep enthusiasts, bridging the gap between daily driving comfort and extreme off-road capability."
+description: "dother.biz.id is the premier independent resource for Jeep Wrangler, Gladiator, and off-road enthusiasts. Expert guides, news, and community culture."
 draft: false
 layout: "page"
+disable_ads: true
 ---
 
 ## The Mission
 
-**dother.biz.id** was established with a singular ambition: to be the ultimate owner's manual for the digital age. In an automotive world filled with generic press releases and spec-sheet readings, we stand for **Real-World Jeep Ownership**.
+**dother.biz.id** was founded with a singular ambition: to serve the **American Off-Road Community** with integrity and depth. In an automotive media landscape often filled with generic press releases, we stand for **Authentic Ownership Experience**.
 
-We believe that owning a Jeep is not just about transportation; it’s a lifestyle defined by freedom and capability. Our coverage goes beyond the showroom floor. We combine latest industry news with practical maintenance advice, historical context, and technical modification guides to provide a comprehensive resource for the 4x4 community.
+We believe that the Jeep brand is not just about a vehicle; it is a symbol of freedom and capability. Our coverage goes beyond the spec sheet. We combine latest industry news with practical "wrenching" advice, historical context, and technical modification guides to provide a comprehensive resource for both the daily driver and the rock crawler.
 
-## Our Approach: Built, Not Just Bought
+## Our Approach: Built, Not Bought
 
-We are a "Trail-First" publication. We understand that a Jeep is a platform for adventure, and our content reflects the three pillars of Jeep ownership:
+We are a "Trail-First" publication. We understand that a rig is a platform for adventure, and our content reflects the core pillars of the Jeep lifestyle:
 
-*   **Modern Engineering:** In-depth coverage of the Wrangler (JL/JK), Gladiator (JT), and Grand Cherokee platforms.
-*   **The Workshop:** Technical guides on suspension lifts, axle gears, engine performance, and essential recovery gear.
-*   **Heritage & Classics:** honoring the legacy of the CJ, YJ, and XJ models that paved the way.
+*   **Modern Engineering:** In-depth coverage of the Wrangler (JL/JK/TJ), Gladiator (JT), and the evolving 4xe electrification.
+*   **The Garage:** Technical guides on suspension geometry, axle gearing, engine performance, and essential recovery gear.
+*   **Heritage & Classics:** Honoring the legacy of the CJ, YJ, and XJ models that paved the way for modern 4x4 culture.
 
-However, parts are nothing without knowledge. Our editorial team ensures that every review and tutorial is grounded in safety and mechanical reality. We don't just list aftermarket parts; we explain how they affect your vehicle's geometry, drivability, and off-road performance.
+Data is nothing without application. Our editorial team ensures that every review and tutorial is grounded in safety and mechanical reality. We don't just list aftermarket parts; we explain how they affect your vehicle's center of gravity, drivability on the highway, and articulation on the trail.
 
 ## Why Trust Us?
 
-To meet the high standards of our readers and advertisers, we adhere to strict editorial guidelines:
+To meet the high standards of our US audience and advertisers, we adhere to strict editorial guidelines:
 
-*   **Technical Accuracy:** We verify mechanical data and modification specs against manufacturer manuals and expert consensus before publishing.
+*   **Technical Accuracy:** We verify mechanical data and modification specs against manufacturer manuals (FSM) and expert consensus before publishing.
 *   **Objectivity:** We are an independent publication. We praise innovation and critique design flaws based on performance, not brand loyalty.
-*   **Responsibility:** We strongly advocate for "Tread Lightly" principles, promoting responsible off-roading to preserve our trails for future generations.
+*   **Stewardship:** We strongly advocate for **"Tread Lightly!"** principles, promoting responsible land usage to keep our public trails open for future generations.
 
 ---
-*dother.biz.id is an independent automotive publication and is not directly affiliated with FCA US LLC. Jeep® is a registered trademark of FCA US LLC.*
+
+### **Disclaimer**
+*dother.biz.id is an independent automotive publication and is **not** affiliated with, sponsored by, or endorsed by FCA US LLC (Stellantis). Jeep®, Wrangler®, Rubicon®, CJ®, and related logos are registered trademarks of FCA US LLC. The terms are used here for descriptive purposes only (Fair Use).*
