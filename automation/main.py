@@ -23,16 +23,16 @@ try:
     GOOGLE_LIBS_AVAILABLE = True
 except ImportError:
     GOOGLE_LIBS_AVAILABLE = False
-    print("⚠️ Google Indexing Libs not found.")
+    print("⚠️ Google Indexing Libs not found. Install: pip install google-api-python-client oauth2client")
 
 # ==========================================
-# ⚙️ CONFIGURATION & SETUP (JEEP EDITION)
+# ⚙️ CONFIGURATION & SETUP
 # ==========================================
 
 GROQ_KEYS_RAW = os.environ.get("GROQ_API_KEY", "") 
 GROQ_API_KEYS = [k.strip() for k in GROQ_KEYS_RAW.split(",") if k.strip()]
 
-WEBSITE_URL = "https://dother.biz.id" 
+WEBSITE_URL = "https://beastion.biz.id" 
 INDEXNOW_KEY = "e74819b68a0f40e98f6ec3dc24f610f0" 
 GOOGLE_JSON_KEY = os.environ.get("GOOGLE_INDEXING_KEY", "") 
 
@@ -40,33 +40,23 @@ if not GROQ_API_KEYS:
     print("❌ FATAL ERROR: Groq API Key is missing!")
     exit(1)
 
-# TIM PENULIS (OTOMOTIF EXPERT)
+# TIM PENULIS
 AUTHOR_PROFILES = [
-    "Rick 'Muddy' O'Connell (Off-road Expert)", 
-    "Sarah Miller (Automotive Historian)",
-    "Mike Stevens (Jeep Mechanic)", 
-    "Tom Davidson (4x4 Reviewer)",
-    "Elena Forza (Car Design Analyst)"
+    "Dave Harsya (Tactical Analyst)", "Sarah Jenkins (Senior Editor)",
+    "Luca Romano (Market Expert)", "Marcus Reynolds (League Correspondent)",
+    "Ben Foster (Data Journalist)"
 ]
 
-# KATEGORI JEEP (MICRO NICHE)
 VALID_CATEGORIES = [
-    "Wrangler Life", 
-    "Classic Jeeps", 
-    "Grand Cherokee", 
-    "Gladiator Truck", 
-    "Off-road Tips", 
-    "Jeep History",
-    "Maintenance & Mods"
+    "Transfer News", "Premier League", "Champions League", 
+    "La Liga", "International", "Tactical Analysis"
 ]
 
-# RSS SOURCES (GOOGLE NEWS QUERY SPESIFIK JEEP)
 RSS_SOURCES = {
-    "Jeep Wrangler News": "https://news.google.com/rss/search?q=Jeep+Wrangler+Review+OR+News&hl=en-US&gl=US&ceid=US:en",
-    "Jeep Gladiator": "https://news.google.com/rss/search?q=Jeep+Gladiator+News&hl=en-US&gl=US&ceid=US:en",
-    "Classic Jeep History": "https://news.google.com/rss/search?q=Classic+Jeep+Willys+History&hl=en-US&gl=US&ceid=US:en",
-    "Jeep Concepts": "https://news.google.com/rss/search?q=Jeep+Concept+Cars+Electric&hl=en-US&gl=US&ceid=US:en",
-    "Offroad Lifestyle": "https://news.google.com/rss/search?q=Offroad+4x4+Adventure&hl=en-US&gl=US&ceid=US:en"
+    "SkySports": "https://www.skysports.com/rss/12040",
+    "BBC Football": "https://feeds.bbci.co.uk/sport/football/rss.xml",
+    "ESPN FC": "https://www.espn.com/espn/rss/soccer/news",
+    "The Guardian": "https://www.theguardian.com/football/rss"
 }
 
 CONTENT_DIR = "content/articles" 
@@ -76,35 +66,32 @@ MEMORY_FILE = f"{DATA_DIR}/link_memory.json"
 TARGET_PER_SOURCE = 1 
 
 # ==========================================
-# 📸 UNSPLASH POOL (JEEP SPECIFIC)
+# 📸 MASSIVE UNSPLASH POOL (Agar Tidak Kosong)
 # ==========================================
+# Dikelompokkan biar relevan dengan keyword berita
 UNSPLASH_POOL = {
-    # Gambar Jeep Wrangler / Rubicon
-    "wrangler": [
-        "1519245659620-e859806a8d3b", "1533473359331-0135ef1bcfb0", "1506015391300-4802dc74de2e",
-        "1568285201-168d6945821c", "1626243836043-34e85741f0b1", "1535446937720-e9cad5377719"
+    "stadium": [
+        "1522778119026-d647f0565c6a", "1577223625816-7546f13df25d", "1508098682722-e99c43a406b2",
+        "1574629810360-7efbbe195018", "1489944440615-453fc2b6a9a9", "1518091043644-c1d4457512c6"
     ],
-    # Gambar Jeep Klasik / Willys
-    "classic": [
-        "1583262612502-869260a99672", "1552932906-e78964d4c207", "1603823483984-7a1926639d67",
-        "1519575706483-221027bfbb31"
+    "action": [
+        "1579952363873-27f3bde9be2b", "1516246844974-e39556ee0945", "1624880357913-a85cbdec04ca",
+        "1543351611-5879d9768f59", "1551958219-acbc608c6377", "1600255821058-c4f89958d700",
+        "1431324155629-1a6deb1dec8d", "1560008516-22462875355a"
     ],
-    # Gambar Offroad / Lumpur / Alam
-    "offroad": [
-        "1495819903669-078927b80d5b", "1469130198188-466c9869852f", "1492144534655-ae79c964c9d7",
-        "1500530855697-b586d89ba3ee", "1588632616462-974a3f123d46"
+    "manager": [
+        "1576921350172-10b27152069b", "1526232761682-d26e03ac148e", "1517466787929-bc90951d0974"
     ],
-    # Gambar Interior / Mesin / Bengkel
-    "parts": [
-        "1486262715619-0113e342bbef", "1487754180477-ea9d477cc6dc", "1498889444388-e67ea62c464b"
+    "crowd": [
+        "1504450758481-7338abc0f511", "1556388169-583b27b40929", "1510567230570-013451e98b74"
     ],
-    # Fallback Umum
     "generic": [
-        "1533473359331-0135ef1bcfb0", "1519245659620-e859806a8d3b", "1506015391300-4802dc74de2e"
+        "1461896836934-ffe607ba8211", "1508098682722-e99c43a406b2", "1459767129814-6a2e84c4831b"
     ]
 }
 
-FALLBACK_IMG_URL = "https://images.unsplash.com/photo-1533473359331-0135ef1bcfb0?auto=format&fit=crop&w=1200&q=80"
+# Fallback terakhir jika internet error
+FALLBACK_IMG_URL = "https://images.unsplash.com/photo-1522778119026-d647f0565c6a?auto=format&fit=crop&w=1200&q=80"
 
 # ==========================================
 # 🧠 HELPER FUNCTIONS
@@ -137,16 +124,21 @@ def fetch_rss_feed(url):
         return feedparser.parse(response.content) if response.status_code == 200 else None
     except: return None
 
+# --- CONTENT CLEANER ---
 def clean_ai_content(text):
+    """Membersihkan output AI dari wrapper code block dan tag HTML"""
     if not text: return ""
     text = re.sub(r'^```[a-zA-Z]*\n', '', text)
     text = re.sub(r'\n```$', '', text)
     text = text.replace("```", "")
+    
+    # HTML cleaner simple
     text = text.replace("<h1>", "# ").replace("</h1>", "\n")
     text = text.replace("<h2>", "## ").replace("</h2>", "\n")
     text = text.replace("<h3>", "### ").replace("</h3>", "\n")
     text = text.replace("<b>", "**").replace("</b>", "**")
     text = text.replace("<p>", "").replace("</p>", "\n\n")
+    
     return text.strip()
 
 # ==========================================
@@ -181,15 +173,21 @@ def submit_to_google(url):
         print(f"      ⚠️ Google Indexing Error: {e}")
 
 # ==========================================
-# 🎨 UNSPLASH ENGINE (JEEP VERSION)
+# 🎨 UNSPLASH ONLY ENGINE (UNIQUE & ROBUST)
 # ==========================================
 def modify_image_to_be_unique(img):
+    """
+    Mengubah pixel gambar secara signifikan agar dianggap unik oleh Google
+    (Zoom/Crop + Flip + Color Grading + Vignette)
+    """
+    # 1. Flip Horizontal (50% Chance)
     if random.random() > 0.5:
         img = ImageOps.mirror(img)
-    
-    # Random Crop Zoom (Agar beda hash)
+
+    # 2. Random ZOOM / CROP (Penting untuk anti-duplikat)
+    # Kita potong sedikit pinggirannya (5% - 15%) lalu resize balik
     w, h = img.size
-    crop_factor = random.uniform(0.05, 0.12)
+    crop_factor = random.uniform(0.05, 0.15)
     left = w * crop_factor
     top = h * crop_factor
     right = w * (1 - crop_factor)
@@ -197,19 +195,21 @@ def modify_image_to_be_unique(img):
     img = img.crop((left, top, right, bottom))
     img = img.resize((1200, 675), Image.Resampling.LANCZOS)
 
-    # Color Grading
+    # 3. Color Grading (Saturation & Contrast)
     enhancer = ImageEnhance.Color(img)
-    img = enhancer.enhance(random.uniform(0.9, 1.2)) 
+    img = enhancer.enhance(random.uniform(0.85, 1.25)) 
     enhancer_c = ImageEnhance.Contrast(img)
-    img = enhancer_c.enhance(random.uniform(0.95, 1.15))
+    img = enhancer_c.enhance(random.uniform(0.9, 1.15))
     
-    # Vignette
+    # 4. Vignette Effect (Gelap di pinggir)
     vignette = Image.new('L', (1200, 675), 0)
     from PIL import ImageDraw
     draw = ImageDraw.Draw(vignette)
     draw.ellipse((30, 30, 1170, 645), fill=255)
     vignette = vignette.filter(ImageFilter.GaussianBlur(100))
-    img = ImageOps.colorize(vignette, (15, 15, 15), (255, 255, 255))
+    img = ImageOps.colorize(vignette, (10, 10, 10), (255, 255, 255))
+    # Note: Karena resize di atas, kita perlu load ulang base image untuk composite? 
+    # Tidak, karena img sudah objek PIL. Kita timpa layer warna.
     
     return img
 
@@ -217,76 +217,89 @@ def generate_unsplash_image(keyword, filename):
     output_path = f"{IMAGE_DIR}/{filename}"
     keyword = keyword.lower()
     
-    # Logic Pemilihan Gambar JEEP
-    selected_pool = UNSPLASH_POOL['generic'] 
+    # 1. Tentukan Kategori ID berdasarkan keyword
+    selected_pool = UNSPLASH_POOL['generic'] # Default
     
-    if any(x in keyword for x in ['wrangler', 'rubicon', 'sahara', 'jk', 'jl']):
-        selected_pool = UNSPLASH_POOL['wrangler']
-    elif any(x in keyword for x in ['classic', 'willys', 'cj', 'history', 'vintage']):
-        selected_pool = UNSPLASH_POOL['classic']
-    elif any(x in keyword for x in ['offroad', 'trail', 'mud', 'rock', 'adventure']):
-        selected_pool = UNSPLASH_POOL['offroad']
-    elif any(x in keyword for x in ['engine', 'repair', 'mod', 'parts', 'interior']):
-        selected_pool = UNSPLASH_POOL['parts']
+    if any(x in keyword for x in ['stadium', 'field', 'arena', 'match', 'game']):
+        selected_pool = UNSPLASH_POOL['stadium']
+    elif any(x in keyword for x in ['goal', 'kick', 'score', 'action', 'vs']):
+        selected_pool = UNSPLASH_POOL['action']
+    elif any(x in keyword for x in ['manager', 'coach', 'boss']):
+        selected_pool = UNSPLASH_POOL['manager']
+    elif any(x in keyword for x in ['fan', 'crowd', 'supporter']):
+        selected_pool = UNSPLASH_POOL['crowd']
     
+    # 2. Loop Retry Mechanism (Agar Tidak Kosong)
+    # Kita coba ambil ID acak sampai 5x percobaan
     attempts = 0
-    while attempts < 5:
+    max_attempts = 5
+    
+    while attempts < max_attempts:
         selected_id = random.choice(selected_pool)
         unsplash_url = f"https://images.unsplash.com/photo-{selected_id}?auto=format&fit=crop&w=1200&q=80"
         
-        print(f"      🎨 Downloading Jeep Image: {selected_id} (Attempt {attempts+1})")
+        print(f"      🎨 Downloading Unsplash ID: {selected_id} (Attempt {attempts+1})")
+        
         try:
             resp = requests.get(unsplash_url, timeout=15)
             if resp.status_code == 200:
                 img = Image.open(BytesIO(resp.content)).convert("RGB")
+                
+                # JADIKAN UNIK (WAJIB)
                 img = modify_image_to_be_unique(img)
+                
                 img.save(output_path, "WEBP", quality=85)
                 print("      ✅ Image Saved & Unique!")
                 return f"/images/{filename}"
-        except: pass
+        except Exception as e:
+            print(f"      ⚠️ Failed: {e}")
+        
         attempts += 1
         time.sleep(1)
+
+    # 3. Last Resort (Jika semua gagal, pakai fallback URL tapi download & modif)
+    print("      ⚠️ All attempts failed. Using Emergency Fallback.")
+    try:
+        resp = requests.get(FALLBACK_IMG_URL, timeout=15)
+        if resp.status_code == 200:
+            img = Image.open(BytesIO(resp.content)).convert("RGB")
+            img = modify_image_to_be_unique(img)
+            img.save(output_path, "WEBP", quality=85)
+            return f"/images/{filename}"
+    except: pass
 
     return FALLBACK_IMG_URL
 
 # ==========================================
-# 🧠 JEEP CONTENT ENGINE (AUTOMOTIVE EXPERT)
+# 🧠 CONTENT ENGINE
 # ==========================================
 
 def get_groq_article_json(title, summary, link, author_name):
     current_date = datetime.now().strftime("%Y-%m-%d")
     
     system_prompt = f"""
-    You are {author_name}, a passionate Automotive Expert specializing in the **Jeep** brand.
+    You are {author_name}, a professional sports journalist.
     CURRENT DATE: {current_date}.
     
-    OBJECTIVE: Write a high-quality, 1000-word article about Jeeps/Off-road.
+    OBJECTIVE: Write a high-quality, 1000-word analysis article.
     
-    🛑 STRICT CONTENT RULES:
-    1. **MARKDOWN ONLY:** No HTML tags.
-    2. **TONE:** Enthusiastic, technical but accessible, and authoritative.
-    3. **ANTI-HOAX:** Be factual about engine specs (Pentastar V6, Hemi V8, 4xe), towing capacity, and model years.
-    4. **NO GENERIC HEADERS:**
-       - ❌ BAD: "Introduction", "Conclusion", "Features".
-       - ✅ GOOD: "Why the Rubicon Dominates the Rocks", "The Pentastar V6 Reliability Verdict".
+    🛑 FORMATTING RULES:
+    1. **MARKDOWN ONLY.** No HTML.
+    2. Headers using hashtags (#).
+    3. Tables using standard markdown.
+    4. NO Code Blocks.
     
-    STRUCTURE ADVICE:
-    - **History/Context:** Mention model codes (CJ, YJ, TJ, JK, JL, JT) where relevant.
-    - **Specs Table:** Use Markdown Table for HP, Torque, Ground Clearance if reviewing a car.
-    - **Pros & Cons:** If it's a review.
-    - **The Verdict:** Is it worth the money?
-
     OUTPUT FORMAT:
     JSON Object keys: "title", "description", "category", "main_keyword", "tags", "content_body".
     """
     
     user_prompt = f"""
-    SOURCE INFO:
-    - Topic: {title}
-    - Snippet: {summary}
+    SOURCE:
+    - Headline: {title}
+    - Summary: {summary}
     - Link: {link}
     
-    TASK: Write the article now using MARKDOWN. Focus on Jeep details.
+    TASK: Write the article now using MARKDOWN.
     """
     
     for api_key in GROQ_API_KEYS:
@@ -316,7 +329,7 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print("🔥 JEEP MICRO NICHE ENGINE STARTED 🔥")
+    print("🔥 ENGINE STARTED: UNSPLASH ONLY + UNIQUE MODE")
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Reading: {source_name}")
@@ -328,13 +341,6 @@ def main():
             if processed >= TARGET_PER_SOURCE: break
             
             clean_title = entry.title.split(" - ")[0]
-            # Filter ekstra: Pastikan artikel ada hubungannya sama mobil/jeep
-            # (Mencegah berita nyasar dari Google News)
-            if "jeep" not in clean_title.lower() and "4x4" not in clean_title.lower() and "off-road" not in clean_title.lower() and "wrangler" not in clean_title.lower():
-               # Kecuali kalau dari sumber spesifik, kita anggap aman.
-               # Tapi untuk hasil terbaik, kita skip yang tidak relevan.
-               pass 
-
             slug = slugify(clean_title, max_length=60, word_boundary=True)
             filename = f"{slug}.md"
             
@@ -354,25 +360,24 @@ def main():
                 print("      ❌ JSON Parse Error")
                 continue
 
-            # 2. Image Generation (UNSPLASH JEEP POOL)
+            # 2. Image Generation (UNSPLASH ONLY)
             keyword = data.get('main_keyword') or clean_title
+            # Kita paksa proses gambar selalu berjalan & return path lokal
             final_img = generate_unsplash_image(keyword, f"{slug}.webp")
             
             # 3. Clean & Save
             clean_body = clean_ai_content(data['content_body'])
             links_md = get_internal_links_markdown()
-            final_body = clean_body + "\n\n### Explore More\n" + links_md
+            final_body = clean_body + "\n\n### Read More\n" + links_md
             
-            # Fallback Category Logic
-            cat = data.get('category', "Jeep History")
-            if cat not in VALID_CATEGORIES:
-                cat = "Wrangler Life" # Default category
-            
+            if data.get('category') not in VALID_CATEGORIES:
+                data['category'] = "International"
+
             md_content = f"""---
 title: "{data['title'].replace('"', "'")}"
 date: {datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00")}
 author: "{author}"
-categories: ["{cat}"]
+categories: ["{data['category']}"]
 tags: {json.dumps(data.get('tags', []))}
 featured_image: "{final_img}"
 description: "{data['description'].replace('"', "'")}"
@@ -385,7 +390,7 @@ weight: {random.randint(1, 10)}
 {final_body}
 
 ---
-*Reference: Automotive analysis by {author} based on news from [{source_name}]({entry.link}).*
+*Reference: Analysis by {author} based on reports from [{source_name}]({entry.link}).*
 """
             with open(f"{CONTENT_DIR}/{filename}", "w", encoding="utf-8") as f:
                 f.write(md_content)

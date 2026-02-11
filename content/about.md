@@ -1,13 +1,13 @@
 ---
 title: "About Us"
-description: "fdother.biz.id bridges the gap between casual fandom and professional tactical analysis."
+description: "fbeastion.biz.id bridges the gap between casual fandom and professional tactical analysis."
 draft: false
 layout: "page"
 ---
 
 ## The Mission
 
-**dother.biz.id** was founded with a singular ambition: to elevate Sports journalism beyond the box score. In an era of clickbait and recycled rumors, we stand for **Deep Contextual Analysis**.
+**beastion.biz.id** was founded with a singular ambition: to elevate Sports journalism beyond the box score. In an era of clickbait and recycled rumors, we stand for **Deep Contextual Analysis**.
 
 We believe that Sports is not just about *what* happened, but *why* it happened. Our coverage combines traditional reporting with modern advanced metrics (xG, PPDA, Heatmaps) to provide a comprehensive understanding of the beautiful game.
 
@@ -29,4 +29,4 @@ However, data is nothing without interpretation. Our editorial team, led by Seni
 *   **Speed & Depth:** We strive to be the first to break the news and the best at explaining it.
 
 ---
-*fdother.biz.id is an independent digital publication committed to the highest standards of Sportss journalism.*
+*fbeastion.biz.id is an independent digital publication committed to the highest standards of Sportss journalism.*

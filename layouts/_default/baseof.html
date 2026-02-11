@@ -14,7 +14,7 @@
     <link rel="preload" href="https://cdn.tailwindcss.com?plugins=typography,line-clamp" as="script">
 
     <!-- 2. SEO TITLE (Rapi tanpa Spasi Berlebih) -->
-    <title>{{ if .IsHome }}{{ .Site.Title }} - Breaking Football News, Transfers & Tactical Analysis{{ else }}{{ .Title }} | {{ .Site.Title }}{{ end }}</title>
+    <title>{{ if .IsHome }}{{ .Site.Title }} - Breaking Sports News, Transfers & Tactical Analysis{{ else }}{{ .Title }} | {{ .Site.Title }}{{ end }}</title>
 
     <!-- 3. META DESCRIPTION (SAFE MODE) -->
     <!-- 'plainify' membuang tag HTML, 'htmlUnescape' membersihkan karakter aneh -->
@@ -77,13 +77,13 @@
     {
       "@context": "https://schema.org",
       "@type": "WebSite",
-      "name": "dother.biz.id",
-      "alternateName": ["Jeepdaily, "dother.biz.id News"],
+      "name": "beastion.biz.id",
+      "alternateName": ["SportDaily", "beastion.biz.id News"],
       "url": "{{ .Site.BaseURL }}",
       "description": "{{ .Site.Params.description }}",
       "publisher": {
         "@type": "Organization",
-        "name": "dother.biz.id",
+        "name": "beastion.biz.id",
         "logo": {
           "@type": "ImageObject",
           "url": "{{ "favicon.svg" | absURL }}"
@@ -109,7 +109,7 @@
       "dateModified": "{{ .Lastmod.Format "2006-01-02T15:04:05Z07:00" }}",
       "author": {
         "@type": "Person",
-        "name": "{{ .Params.author | default "dother.biz.id Team" }}"
+        "name": "{{ .Params.author | default "beastion.biz.id Team" }}"
       },
       "publisher": {
         "@type": "Organization",

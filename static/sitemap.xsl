@@ -7,7 +7,7 @@
   <xsl:template match="/">
     <html xmlns="http://www.w3.org/1999/xhtml">
       <head>
-        <title>XML Sitemap - dother.biz.id</title>
+        <title>XML Sitemap - beastion.biz.id</title>
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
         <style type="text/css">
           body {
@@ -83,7 +83,7 @@
         <div class="header">
           <h1>XML Sitemap</h1>
           <p class="desc">
-            This is a generated XML Sitemap for <strong>dother.biz.id</strong>. It helps search engines like Google to index our content.
+            This is a generated XML Sitemap for <strong>beastion.biz.id</strong>. It helps search engines like Google to index our content.
             <span class="count"><xsl:value-of select="count(sitemap:urlset/sitemap:url)"/> URLs Found</span>
           </p>
         </div>
