@@ -1,22 +1,54 @@
 {{ define "main" }}
-<div class="container mx-auto px-4 py-12 max-w-4xl">
+<div class="container mx-auto px-4 py-12">
     
-    <!-- Header Halaman (Clean) -->
-    <header class="mb-10 text-center border-b border-gray-200 pb-8">
-        <h1 class="font-display font-black text-4xl md:text-5xl text-gray-900 mb-4 uppercase tracking-tight">
-            {{ .Title }}
-        </h1>
-        <p class="text-gray-500 text-lg font-medium italic">
-            {{ .Description }}
-        </p>
-    </header>
+    <!-- Wrapper Box (Agar fokus di tengah seperti dokumen) -->
+    <div class="max-w-4xl mx-auto bg-white rounded-sm shadow-sm border border-gray-100 p-6 md:p-12">
 
-    <!-- Konten Halaman (Legal/Text Style) -->
-    <article class="prose prose-lg prose-red max-w-none 
-                    prose-headings:font-bold prose-headings:text-gray-900 
-                    prose-p:text-gray-700 prose-li:text-gray-700">
-        {{ .Content }}
-    </article>
+        <!-- HEADER HALAMAN -->
+        <header class="mb-10 text-center border-b-2 border-gray-100 pb-8">
+            
+            <!-- Dekorasi Grille Jeep (Branding) -->
+            <div class="flex justify-center gap-[3px] mb-4 opacity-80">
+                <div class="w-1 h-5 bg-red-600"></div>
+                <div class="w-1 h-5 bg-red-600"></div>
+                <div class="w-1 h-5 bg-red-600"></div>
+                <div class="w-1 h-5 bg-red-600"></div>
+                <div class="w-1 h-5 bg-red-600"></div>
+                <div class="w-1 h-5 bg-red-600"></div>
+                <div class="w-1 h-5 bg-red-600"></div>
+            </div>
+
+            <!-- Judul Halaman -->
+            <h1 class="font-display font-black text-4xl md:text-5xl text-gray-900 mb-3 uppercase tracking-tighter">
+                {{ .Title }}
+            </h1>
+
+            <!-- Deskripsi (Opsional) -->
+            {{ if .Description }}
+            <p class="text-gray-500 text-lg font-medium italic mb-4">
+                {{ .Description }}
+            </p>
+            {{ end }}
+
+            <!-- Tanggal Update (Penting untuk Policy Page) -->
+            {{ if not .Date.IsZero }}
+            <div class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                Last Updated: {{ .Date.Format "January 2, 2006" }}
+            </div>
+            {{ end }}
+        </header>
+
+        <!-- KONTEN HALAMAN -->
+        <article class="prose prose-lg prose-red max-w-none 
+                        prose-headings:font-display prose-headings:font-bold prose-headings:uppercase prose-headings:tracking-tight prose-headings:text-gray-900
+                        prose-p:text-gray-700 prose-p:leading-relaxed prose-p:font-sans
+                        prose-a:text-red-600 prose-a:font-bold prose-a:no-underline hover:prose-a:underline
+                        prose-li:text-gray-700 prose-strong:text-gray-900 prose-strong:font-black
+                        prose-hr:border-gray-200">
+            {{ .Content }}
+        </article>
+
+    </div>
 
 </div>
 {{ end }}
