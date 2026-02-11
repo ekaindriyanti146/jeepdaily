@@ -1,7 +1,7 @@
 ---
 title: "Editorial Policy & Standards"
 description: "Our commitment to technical accuracy, journalistic integrity, and transparency in automotive reporting."
-date: 2026-02-12
+date: 2026-02-11
 layout: "page"
 type: "page"
 draft: false 
