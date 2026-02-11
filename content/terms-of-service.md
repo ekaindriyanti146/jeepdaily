@@ -1,7 +1,7 @@
 ---
 title: "Terms of Service"
 description: "User agreement, liability limitations, and rules for using dother.biz.id."
-date: 2026-02-12
+date: 2026-02-11
 layout: "page"
 type: "page"
 draft: false 
