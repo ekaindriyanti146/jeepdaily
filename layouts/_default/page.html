@@ -58,30 +58,14 @@
             </figure>
             {{ end }}
 
-            <!-- IKLAN ATAS (Responsive Slot) -->
-            {{ if not (in .Params.categories "Legal") }}
-            <div class="my-8 w-full bg-gray-50 border-y border-gray-200 py-8 text-center">
-                <span class="text-[10px] text-gray-400 uppercase tracking-widest block mb-2">Advertisement</span>
-                <div class="flex items-center justify-center text-gray-300 text-xs font-mono h-[100px] border-2 border-dashed border-gray-200 mx-auto w-3/4">
-                    [ Slot Google AdSense Display ]
-                </div>
-            </div>
-            {{ end }}
+            
 
             <!-- ISI ARTIKEL (Prose) -->
             <div class="prose prose-lg prose-red max-w-none text-gray-800 leading-relaxed marker:text-red-600">
                 {{ .Content }}
             </div>
 
-            <!-- IKLAN BAWAH (Multiplex) -->
-            {{ if not (in .Params.categories "Legal") }}
-            <div class="mt-16 w-full bg-gray-50 border border-gray-200 p-6 text-center rounded-xl">
-                <span class="text-[10px] text-gray-400 uppercase tracking-widest block mb-2">Sponsored Content</span>
-                <div class="flex items-center justify-center text-gray-300 text-xs font-mono h-[250px] border-2 border-dashed border-gray-200">
-                    [ Slot Google AdSense Multiplex ]
-                </div>
-            </div>
-            {{ end }}
+            
 
             <!-- TAGS -->
             {{ if .Params.tags }}
