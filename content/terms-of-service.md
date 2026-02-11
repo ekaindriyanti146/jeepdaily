@@ -4,8 +4,7 @@ description: "User agreement, liability limitations, and rules for using dother.
 date: 2026-02-12
 layout: "page"
 type: "page"
-draft: false
-disable_ads: true
+draft: false 
 ---
 
 **Effective Date: February 12, 2026**
