@@ -1,7 +1,7 @@
 ---
 title: "Privacy Policy"
 description: "Legal documentation regarding data collection, cookies, and user privacy rights (CCPA & GDPR Compliant)."
-date: 2026-02-12
+date: 2026-02-11
 layout: "page"
 type: "page"
 draft: false 
