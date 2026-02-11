@@ -7,7 +7,7 @@ type: "page"
 draft: false 
 ---
 
-**Effective Date: February 12, 2026**
+**Effective Date: February 11, 2026**
 
 Welcome to **dother.biz.id**. By accessing or using this Website, you agree to be bound by these Terms of Service and all applicable laws and regulations. If you do not agree with any of these terms, you are prohibited from using or accessing this site.
 
