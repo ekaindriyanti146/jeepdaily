@@ -1,117 +1,163 @@
 {{ define "main" }}
-<!-- 1. LOGIC SAFETY FIRST (Diproses di awal agar tidak error di HTML) -->
-{{ $categoryName := "News" }}
-{{ $categoryLink := "#" }}
-{{ if .Params.categories }}
-    {{ $categoryName = index .Params.categories 0 }}
-    {{ $categoryLink = printf "/categories/%s" ($categoryName | urlize) | relLangURL }}
-{{ end }}
+<!-- 1. CONTAINER UTAMA -->
+<div class="container mx-auto px-4 py-8 md:py-12 max-w-7xl">
 
-<div class="container mx-auto px-4 py-8">
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
-        
-        <!-- KOLOM UTAMA -->
-        <article class="lg:col-span-8">
+    <!-- 2. LAYOUT: Grid (Kiri Konten, Kanan Sidebar) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+
+        <!-- ==========================
+             KOLOM KIRI: ARTIKEL (8 Kolom / ~66%)
+             ========================== -->
+        <article class="lg:col-span-8 bg-white min-w-0">
             
-            <!-- BREADCRUMB (Safe Mode) -->
-            <div class="mb-4 flex items-center gap-3">
-                <a href="{{ $categoryLink }}" class="inline-block bg-red-600 text-white text-[10px] font-bold px-3 py-1 uppercase tracking-widest rounded-sm hover:bg-black transition">
-                    {{ $categoryName }}
+            <!-- Breadcrumb -->
+            <nav class="text-xs font-bold text-gray-500 mb-6 uppercase tracking-wider flex items-center gap-2">
+                <a href="/" class="hover:text-red-600 transition-colors">Home</a> 
+                <span class="text-gray-300">/</span>
+                {{ if .Params.categories }}
+                <a href="/categories/{{ index .Params.categories 0 | urlize }}" class="hover:text-red-600 transition-colors text-red-600">
+                    {{ index .Params.categories 0 }}
                 </a>
-                <span class="text-gray-400 text-xs uppercase tracking-wide font-bold">
-                    {{ .ReadingTime }} min read
-                </span>
-            </div>
+                <span class="text-gray-300">/</span>
+                {{ end }}
+                <span class="text-gray-900 line-clamp-1 border-b border-transparent">{{ .Title }}</span>
+            </nav>
 
-            <!-- HEADLINE -->
-            <h1 class="font-display font-black text-3xl md:text-5xl text-gray-900 leading-tight mb-6 uppercase tracking-tight">
-                {{ .Title }}
-            </h1>
-
-            <!-- AUTHOR INFO -->
-            <div class="flex flex-col md:flex-row md:items-center justify-between border-t border-b border-gray-100 py-4 mb-8">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-xl border border-gray-200">🚙</div>
-                    <div class="flex flex-col">
-                        <span class="text-xs font-bold text-gray-900 uppercase">
-                            By <span class="text-red-600">{{ .Params.author | default "Jeep Daily" }}</span>
+            <!-- Header Content -->
+            <header class="mb-8 border-b border-gray-100 pb-8">
+                <h1 class="text-3xl md:text-4xl lg:text-5xl font-black text-gray-900 leading-tight mb-6">
+                    {{ .Title }}
+                </h1>
+                
+                <div class="flex items-center justify-between flex-wrap gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path></svg>
+                        </div>
+                        <div class="flex flex-col">
+                            <span class="text-xs font-bold text-gray-900 uppercase">{{ .Params.author | default "Redaksi" }}</span>
+                            <span class="text-[10px] text-gray-500 font-mono">Published: {{ .Date.Format "Jan 02, 2006" }}</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Share Button Placeholder (Opsional) -->
+                    <div class="flex gap-2">
+                        <span class="px-3 py-1 bg-gray-100 rounded-full text-[10px] font-bold text-gray-500">
+                            {{ .ReadingTime }} min read
                         </span>
-                        <time class="text-xs text-gray-500 font-medium">
-                            {{ .Date.Format "January 02, 2006" }}
-                        </time>
                     </div>
                 </div>
-            </div>
-
-            <!-- IKLAN TOP (Murni HTML, No Logic) -->
-            <div class="w-full my-6 flex flex-col items-center">
-                <div class="w-full bg-gray-50 min-h-[100px] flex items-center justify-center border border-gray-100">
-                    <span class="text-gray-300 text-xs">ADVERTISEMENT TOP</span>
-                </div>
-            </div>
+            </header>
 
             <!-- FEATURED IMAGE -->
             {{ if .Params.featured_image }}
-            <figure class="mb-10">
-                <img src="{{ .Params.featured_image }}" alt="{{ .Title }}" class="w-full h-auto object-cover rounded shadow-sm" width="800" height="450">
+            <figure class="mb-10 w-full rounded-2xl overflow-hidden shadow-lg relative aspect-video bg-gray-100">
+                <img src="{{ .Params.featured_image | absURL }}" 
+                     alt="{{ .Title }}" 
+                     class="absolute inset-0 w-full h-full object-cover">
             </figure>
             {{ end }}
 
-            <!-- KONTEN -->
-            <div class="prose prose-lg prose-red max-w-none prose-headings:font-display prose-headings:uppercase prose-p:text-gray-800">
+            <!-- IKLAN ATAS (Responsive Slot) -->
+            {{ if not (in .Params.categories "Legal") }}
+            <div class="my-8 w-full bg-gray-50 border-y border-gray-200 py-8 text-center">
+                <span class="text-[10px] text-gray-400 uppercase tracking-widest block mb-2">Advertisement</span>
+                <div class="flex items-center justify-center text-gray-300 text-xs font-mono h-[100px] border-2 border-dashed border-gray-200 mx-auto w-3/4">
+                    [ Slot Google AdSense Display ]
+                </div>
+            </div>
+            {{ end }}
+
+            <!-- ISI ARTIKEL (Prose) -->
+            <div class="prose prose-lg prose-red max-w-none text-gray-800 leading-relaxed marker:text-red-600">
                 {{ .Content }}
             </div>
 
-            <!-- IKLAN BOTTOM -->
-            <div class="w-full mt-12 py-8 border-t border-gray-100">
-                <div class="w-full bg-gray-50 min-h-[250px] flex items-center justify-center border border-gray-100">
-                     <span class="text-gray-300 text-xs">ADVERTISEMENT BOTTOM</span>
+            <!-- IKLAN BAWAH (Multiplex) -->
+            {{ if not (in .Params.categories "Legal") }}
+            <div class="mt-16 w-full bg-gray-50 border border-gray-200 p-6 text-center rounded-xl">
+                <span class="text-[10px] text-gray-400 uppercase tracking-widest block mb-2">Sponsored Content</span>
+                <div class="flex items-center justify-center text-gray-300 text-xs font-mono h-[250px] border-2 border-dashed border-gray-200">
+                    [ Slot Google AdSense Multiplex ]
                 </div>
             </div>
+            {{ end }}
 
-            <!-- TAGS (Safe Logic) -->
-            <div class="mt-4">
-                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Tags</h4>
+            <!-- TAGS -->
+            {{ if .Params.tags }}
+            <div class="mt-10 pt-6 border-t border-gray-100">
                 <div class="flex flex-wrap gap-2">
                     {{ range .Params.tags }}
-                    <a href="{{ "/tags/" | relLangURL }}{{ . | urlize }}" class="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-2 rounded transition uppercase">
-                        {{ . }}
+                    <a href="/tags/{{ . | urlize }}" class="px-3 py-1 bg-gray-100 hover:bg-red-600 hover:text-white text-gray-600 text-xs font-bold rounded-full transition-colors">
+                        #{{ . }}
                     </a>
                     {{ end }}
                 </div>
             </div>
+            {{ end }}
+
         </article>
 
-        <!-- SIDEBAR -->
-        <aside class="lg:col-span-4 mt-12 lg:mt-0">
-            <div class="sticky top-24">
-                <!-- IKLAN SIDEBAR -->
-                <div class="mb-8 w-full bg-gray-50 min-h-[600px] flex items-center justify-center border border-gray-100">
-                    <span class="text-gray-300 text-xs">ADVERTISEMENT SIDEBAR</span>
-                </div>
-
-                <!-- LATEST POSTS -->
-                <div class="mb-6 border-b border-gray-200 pb-2">
-                    <h3 class="font-display font-bold text-lg uppercase text-gray-900">Latest Garage</h3>
+        <!-- ==========================
+             KOLOM KANAN: SIDEBAR (4 Kolom / ~33%)
+             ========================== -->
+        <aside class="lg:col-span-4 space-y-10 sticky top-10">
+            
+            <!-- WIDGET 1: LATEST NEWS -->
+            <div class="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+                <div class="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+                    <h3 class="font-black text-gray-900 uppercase text-sm tracking-wider flex items-center gap-2">
+                        <span class="w-1 h-4 bg-red-600 rounded-full"></span> Latest News
+                    </h3>
                 </div>
                 
-                <div class="flex flex-col gap-6">
-                    {{ range first 5 (where .Site.RegularPages "Section" "articles") }}
-                    <article class="flex gap-4 group">
-                        <a href="{{ .Permalink }}" class="shrink-0 w-20 h-20 bg-gray-200 rounded-sm overflow-hidden">
+                <div class="p-4 flex flex-col gap-5">
+                    <!-- LOGIC FIX: Gabungkan 'articles' dan 'posts' agar sidebar tidak kosong -->
+                    {{ $articles := where .Site.RegularPages "Section" "articles" }}
+                    {{ $posts := where .Site.RegularPages "Section" "posts" }}
+                    {{ $sidebar_content := union $articles $posts }}
+                    {{ $sidebar_content := $sidebar_content.ByDate.Reverse }}
+                    
+                    {{ range first 5 $sidebar_content }}
+                    <a href="{{ .Permalink }}" class="flex gap-4 group items-start">
+                        <!-- Thumbnail (Fixed Aspect Ratio) -->
+                        <div class="w-20 h-20 bg-gray-100 shrink-0 overflow-hidden rounded-lg relative">
                             {{ if .Params.featured_image }}
-                            <img src="{{ .Params.featured_image }}" class="w-full h-full object-cover">
+                            <img src="{{ .Params.featured_image | absURL }}" class="w-full h-full object-cover group-hover:scale-110 transition duration-500" loading="lazy">
+                            {{ else }}
+                            <div class="w-full h-full flex items-center justify-center text-gray-300 text-[10px]">No Img</div>
                             {{ end }}
-                        </a>
-                        <div>
-                            <h4 class="font-bold text-sm leading-snug group-hover:text-red-600 transition">
-                                <a href="{{ .Permalink }}">{{ .Title }}</a>
-                            </h4>
                         </div>
-                    </article>
+                        <!-- Judul -->
+                        <div class="flex-1 min-w-0 py-1">
+                            <h4 class="text-sm font-bold text-gray-900 leading-snug group-hover:text-red-600 line-clamp-2 mb-1 transition-colors">
+                                {{ .Title }}
+                            </h4>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] text-gray-400 font-medium">{{ .Date.Format "Jan 02" }}</span>
+                                {{ if .Params.categories }}
+                                <span class="text-[9px] text-red-500 font-bold uppercase border border-red-100 px-1 rounded">
+                                    {{ index .Params.categories 0 }}
+                                </span>
+                                {{ end }}
+                            </div>
+                        </div>
+                    </a>
                     {{ end }}
                 </div>
             </div>
+
+            <!-- WIDGET 2: IKLAN VERTIKAL -->
+            <!-- Dipisah dari Latest News agar rapi -->
+            {{ if not (in .Params.categories "Legal") }}
+            <div class="bg-white border border-gray-200 p-4 rounded-xl shadow-sm flex flex-col items-center">
+                <span class="text-[10px] text-gray-400 uppercase tracking-widest mb-3">Advertisement</span>
+                <div class="w-full aspect-[1/2] bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-400 text-xs font-mono rounded text-center p-4">
+                    [ AdSense Vertical<br>300x600 or Responsive ]
+                </div>
+            </div>
+            {{ end }}
+
         </aside>
 
     </div>
