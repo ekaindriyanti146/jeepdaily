@@ -1,7 +1,7 @@
 ---
 title: "About Us"
 description: "dother.biz.id is the premier independent resource for Jeep Wrangler, Gladiator, and off-road enthusiasts."
-date: 2023-10-27
+date: 2026-01-27
 layout: "page"
 type: "page"
 draft: false
