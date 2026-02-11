@@ -1,155 +1,116 @@
 {{ define "main" }}
+<!-- 1. LOGIC SAFETY FIRST (Diproses di awal agar tidak error di HTML) -->
+{{ $categoryName := "News" }}
+{{ $categoryLink := "#" }}
+{{ if .Params.categories }}
+    {{ $categoryName = index .Params.categories 0 }}
+    {{ $categoryLink = printf "/categories/%s" ($categoryName | urlize) | relLangURL }}
+{{ end }}
+
 <div class="container mx-auto px-4 py-8">
-    
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
         
-        <!-- KOLOM UTAMA (Artikel) -->
+        <!-- KOLOM UTAMA -->
         <article class="lg:col-span-8">
             
-            <!-- 1. BREADCRUMB & BADGE (Fixed Logic) -->
+            <!-- BREADCRUMB (Safe Mode) -->
             <div class="mb-4 flex items-center gap-3">
-                {{ if .Params.categories }}
-                    {{ $cat := index .Params.categories 0 }}
-                    {{ $catURL := printf "/categories/%s" ($cat | urlize) | relLangURL }}
-                    <a href="{{ $catURL }}" 
-                       class="inline-block bg-red-600 text-white text-[10px] font-bold px-3 py-1 uppercase tracking-widest rounded-sm hover:bg-red-800 transition">
-                        {{ $cat }}
-                    </a>
-                {{ end }}
+                <a href="{{ $categoryLink }}" class="inline-block bg-red-600 text-white text-[10px] font-bold px-3 py-1 uppercase tracking-widest rounded-sm hover:bg-black transition">
+                    {{ $categoryName }}
+                </a>
                 <span class="text-gray-400 text-xs uppercase tracking-wide font-bold">
                     {{ .ReadingTime }} min read
                 </span>
             </div>
 
-            <!-- 2. HEADLINE -->
-            <h1 class="font-display font-black text-3xl md:text-5xl lg:text-[3.2rem] text-gray-900 leading-tight mb-6">
+            <!-- HEADLINE -->
+            <h1 class="font-display font-black text-3xl md:text-5xl text-gray-900 leading-tight mb-6 uppercase tracking-tight">
                 {{ .Title }}
             </h1>
 
-            <!-- 3. AUTHOR & DATE -->
+            <!-- AUTHOR INFO -->
             <div class="flex flex-col md:flex-row md:items-center justify-between border-t border-b border-gray-100 py-4 mb-8">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-xl border border-gray-200">
-                        🚙
-                    </div>
+                    <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-xl border border-gray-200">🚙</div>
                     <div class="flex flex-col">
                         <span class="text-xs font-bold text-gray-900 uppercase">
-                            By <span class="text-red-600">{{ .Params.author | default "Jeep Daily Editor" }}</span>
+                            By <span class="text-red-600">{{ .Params.author | default "Jeep Daily" }}</span>
                         </span>
                         <time class="text-xs text-gray-500 font-medium">
-                            Published: {{ .Date.Format "January 2, 2006" }}
+                            {{ .Date.Format "January 02, 2006" }}
                         </time>
                     </div>
                 </div>
             </div>
 
-            <!-- ADSENSE SLOT 1: TOP -->
+            <!-- IKLAN TOP (Murni HTML, No Logic) -->
             <div class="w-full my-6 flex flex-col items-center">
-                <span class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Advertisement</span>
-                <div class="w-full bg-gray-50 min-h-[100px] flex items-center justify-center border border-gray-100 rounded-sm">
-                    <span class="text-gray-300 text-xs">Ad Space Top</span>
+                <div class="w-full bg-gray-50 min-h-[100px] flex items-center justify-center border border-gray-100">
+                    <span class="text-gray-300 text-xs">ADVERTISEMENT TOP</span>
                 </div>
             </div>
 
-            <!-- 4. MAIN IMAGE (Safe Alt Text) -->
+            <!-- FEATURED IMAGE -->
             {{ if .Params.featured_image }}
             <figure class="mb-10">
-                <img src="{{ .Params.featured_image }}" 
-                     alt="{{ .Title }}" 
-                     class="w-full h-auto object-cover rounded shadow-lg"
-                     width="1200" height="675">
-                <figcaption class="text-xs text-gray-500 mt-2 italic text-center">
-                    Image via Jeep Daily Garage
-                </figcaption>
+                <img src="{{ .Params.featured_image }}" alt="{{ .Title }}" class="w-full h-auto object-cover rounded shadow-sm" width="800" height="450">
             </figure>
             {{ end }}
 
-            <!-- 5. ARTICLE CONTENT -->
-            <div class="prose prose-lg max-w-none 
-                        prose-headings:font-display prose-headings:font-bold prose-headings:text-gray-900
-                        prose-p:font-sans prose-p:text-gray-800 prose-p:leading-relaxed
-                        prose-a:text-red-600 prose-a:font-bold prose-a:no-underline hover:prose-a:underline
-                        prose-blockquote:bg-gray-50 prose-blockquote:border-l-4 prose-blockquote:border-red-600 
-                        prose-blockquote:py-4 prose-blockquote:px-6 prose-blockquote:rounded-r-lg prose-blockquote:not-italic
-                        prose-table:border prose-table:border-gray-200 prose-table:shadow-sm prose-table:w-full prose-table:text-sm
-                        prose-th:bg-gray-100 prose-th:p-3 prose-th:text-gray-900 prose-th:font-black prose-th:uppercase prose-th:text-xs prose-th:tracking-wider prose-th:border-b
-                        prose-td:p-3 prose-td:border-b prose-td:border-gray-100 prose-td:text-gray-700">
+            <!-- KONTEN -->
+            <div class="prose prose-lg prose-red max-w-none prose-headings:font-display prose-headings:uppercase prose-p:text-gray-800">
                 {{ .Content }}
             </div>
 
-            <!-- ADSENSE SLOT 2: BOTTOM -->
-            <div class="w-full mt-12 mb-8 flex flex-col items-center border-t border-b border-gray-100 py-8">
-                <span class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Advertisement</span>
-                <div class="w-full bg-gray-50 min-h-[250px] flex items-center justify-center border border-gray-100 rounded-sm">
-                     <span class="text-gray-300 text-xs">Ad Space Bottom</span>
+            <!-- IKLAN BOTTOM -->
+            <div class="w-full mt-12 py-8 border-t border-gray-100">
+                <div class="w-full bg-gray-50 min-h-[250px] flex items-center justify-center border border-gray-100">
+                     <span class="text-gray-300 text-xs">ADVERTISEMENT BOTTOM</span>
                 </div>
             </div>
 
-            <!-- 6. TAGS (Fixed Logic) -->
+            <!-- TAGS (Safe Logic) -->
             <div class="mt-4">
-                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Related Specs & Models</h4>
+                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Tags</h4>
                 <div class="flex flex-wrap gap-2">
                     {{ range .Params.tags }}
-                    {{ $tagURL := printf "/tags/%s" (. | urlize) | relLangURL }}
-                    <a href="{{ $tagURL }}" class="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-2 rounded transition uppercase">
+                    <a href="{{ "/tags/" | relLangURL }}{{ . | urlize }}" class="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3 py-2 rounded transition uppercase">
                         {{ . }}
                     </a>
                     {{ end }}
                 </div>
             </div>
-
         </article>
 
         <!-- SIDEBAR -->
-        <aside class="lg:col-span-4 hidden lg:block mt-12 lg:mt-0">
+        <aside class="lg:col-span-4 mt-12 lg:mt-0">
             <div class="sticky top-24">
+                <!-- IKLAN SIDEBAR -->
+                <div class="mb-8 w-full bg-gray-50 min-h-[600px] flex items-center justify-center border border-gray-100">
+                    <span class="text-gray-300 text-xs">ADVERTISEMENT SIDEBAR</span>
+                </div>
+
+                <!-- LATEST POSTS -->
+                <div class="mb-6 border-b border-gray-200 pb-2">
+                    <h3 class="font-display font-bold text-lg uppercase text-gray-900">Latest Garage</h3>
+                </div>
                 
-                <!-- ADSENSE SLOT 3: SIDEBAR -->
-                <div class="flex flex-col items-center mb-8">
-                    <span class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Advertisement</span>
-                    <div class="w-full bg-gray-50 min-h-[600px] flex items-center justify-center border border-gray-100 rounded-sm">
-                        <span class="text-gray-300 text-xs">Sidebar Ad</span>
-                    </div>
-                </div>
-
-                <!-- Sidebar Header -->
-                <div class="flex items-center justify-between mb-6 border-b border-gray-200 pb-2">
-                    <h3 class="font-display font-bold text-lg uppercase tracking-tight text-gray-900">
-                        Latest from Garage
-                    </h3>
-                    <span class="w-2 h-2 bg-red-600 rounded-full animate-pulse"></span>
-                </div>
-
-                <!-- Latest News Loop -->
                 <div class="flex flex-col gap-6">
-                    {{ $current := . }}
-                    {{ $related := where .Site.RegularPages "Section" "articles" }}
-                    {{ $related := where $related "Permalink" "ne" $current.Permalink }}
-                    
-                    {{ range first 5 $related }}
-                    <article class="group flex gap-4">
-                        <a href="{{ .Permalink }}" class="shrink-0 w-24 h-24 overflow-hidden rounded-md shadow-sm bg-gray-200 relative">
+                    {{ range first 5 (where .Site.RegularPages "Section" "articles") }}
+                    <article class="flex gap-4 group">
+                        <a href="{{ .Permalink }}" class="shrink-0 w-20 h-20 bg-gray-200 rounded-sm overflow-hidden">
                             {{ if .Params.featured_image }}
-                            <img src="{{ .Params.featured_image }}" class="w-full h-full object-cover transition duration-300 group-hover:scale-110" loading="lazy">
-                            {{ else }}
-                            <div class="w-full h-full flex items-center justify-center text-gray-400 text-xs">
-                                🚙
-                            </div>
+                            <img src="{{ .Params.featured_image }}" class="w-full h-full object-cover">
                             {{ end }}
                         </a>
-                        <div class="flex flex-col justify-start">
-                            <span class="text-[10px] font-bold text-red-600 uppercase mb-1">
-                                {{ index .Params.categories 0 | default "Jeep Life" }}
-                            </span>
-                            <h4 class="font-display font-bold text-sm leading-snug group-hover:text-red-600 transition line-clamp-3">
+                        <div>
+                            <h4 class="font-bold text-sm leading-snug group-hover:text-red-600 transition">
                                 <a href="{{ .Permalink }}">{{ .Title }}</a>
                             </h4>
-                            <span class="text-[10px] text-gray-400 mt-2">{{ .Date.Format "Jan 02" }}</span>
                         </div>
                     </article>
                     {{ end }}
                 </div>
-
             </div>
         </aside>
 
