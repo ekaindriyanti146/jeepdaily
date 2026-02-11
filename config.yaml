@@ -1,0 +1,44 @@
+baseURL: "https://dother.biz.id/"
+languageCode: "en-us"
+title: "Jeep Daily & Offroad News"
+canonifyURLs: true
+
+permalinks:
+  articles: "/:slug/"
+
+markup:
+  goldmark:
+    renderer:
+      unsafe: true
+
+outputs:
+  home:
+    - HTML
+    - RSS
+    - Sitemap
+  page:
+    - HTML
+  section:
+    - HTML
+    - RSS
+  taxonomy:
+    - HTML
+    - RSS
+  term:
+    - HTML
+    - RSS
+
+services:
+  rss:
+    limit: 50
+
+taxonomies:
+  category: "categories"
+  tag: "tags"
+
+params:
+  description: "Your ultimate source for Jeep Wrangler, Gladiator, and off-road history. Expert reviews, maintenance tips, and 4x4 culture."
+  defaultImage: "/images/default-jeep.jpg"
+  author:
+    name: "dother.biz.id Team"
+    email: "contact@Sportdaily.com"
