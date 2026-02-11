@@ -1,32 +1,33 @@
 ---
 title: "About Us"
-description: "fbeastion.biz.id bridges the gap between casual fandom and professional tactical analysis."
+description: "dother.biz.id is the premier digital garage for Jeep enthusiasts, bridging the gap between daily driving comfort and extreme off-road capability."
 draft: false
 layout: "page"
 ---
 
 ## The Mission
 
-**beastion.biz.id** was founded with a singular ambition: to elevate Sports journalism beyond the box score. In an era of clickbait and recycled rumors, we stand for **Deep Contextual Analysis**.
+**dother.biz.id** was established with a singular ambition: to be the ultimate owner's manual for the digital age. In an automotive world filled with generic press releases and spec-sheet readings, we stand for **Real-World Jeep Ownership**.
 
-We believe that Sports is not just about *what* happened, but *why* it happened. Our coverage combines traditional reporting with modern advanced metrics (xG, PPDA, Heatmaps) to provide a comprehensive understanding of the beautiful game.
+We believe that owning a Jeep is not just about transportation; it’s a lifestyle defined by freedom and capability. Our coverage goes beyond the showroom floor. We combine latest industry news with practical maintenance advice, historical context, and technical modification guides to provide a comprehensive resource for the 4x4 community.
 
-## Our Approach: Data Meets Passion
+## Our Approach: Built, Not Just Bought
 
-We are a "Digital-First" newsroom leveraging advanced technology and data pipelines to track 6 major competitions:
-*   Premier League
-*   La Liga
-*   UEFA Champions League
-*   International Tournaments
-*   Transfer Markets
+We are a "Trail-First" publication. We understand that a Jeep is a platform for adventure, and our content reflects the three pillars of Jeep ownership:
 
-However, data is nothing without interpretation. Our editorial team, led by Senior Analyst **Dave Harsya**, ensures that every statistic tells a story. We don't just list numbers; we explain their tactical implications on the pitch.
+*   **Modern Engineering:** In-depth coverage of the Wrangler (JL/JK), Gladiator (JT), and Grand Cherokee platforms.
+*   **The Workshop:** Technical guides on suspension lifts, axle gears, engine performance, and essential recovery gear.
+*   **Heritage & Classics:** honoring the legacy of the CJ, YJ, and XJ models that paved the way.
+
+However, parts are nothing without knowledge. Our editorial team ensures that every review and tutorial is grounded in safety and mechanical reality. We don't just list aftermarket parts; we explain how they affect your vehicle's geometry, drivability, and off-road performance.
 
 ## Why Trust Us?
 
-*   **Accuracy First:** We verify transfer rumors against Tier-1 sources before publishing.
-*   **Objectivity:** While we love the game, our analysis remains unbiased. We praise rivals and critique favorites based on performance, not emotion.
-*   **Speed & Depth:** We strive to be the first to break the news and the best at explaining it.
+To meet the high standards of our readers and advertisers, we adhere to strict editorial guidelines:
+
+*   **Technical Accuracy:** We verify mechanical data and modification specs against manufacturer manuals and expert consensus before publishing.
+*   **Objectivity:** We are an independent publication. We praise innovation and critique design flaws based on performance, not brand loyalty.
+*   **Responsibility:** We strongly advocate for "Tread Lightly" principles, promoting responsible off-roading to preserve our trails for future generations.
 
 ---
-*fbeastion.biz.id is an independent digital publication committed to the highest standards of Sportss journalism.*
+*dother.biz.id is an independent automotive publication and is not directly affiliated with FCA US LLC. Jeep® is a registered trademark of FCA US LLC.*
