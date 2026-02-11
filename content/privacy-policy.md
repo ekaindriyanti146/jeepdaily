@@ -4,8 +4,7 @@ description: "Legal documentation regarding data collection, cookies, and user p
 date: 2026-02-12
 layout: "page"
 type: "page"
-draft: false
-disable_ads: true
+draft: false 
 ---
 
 **Last Updated: February 12, 2026**
