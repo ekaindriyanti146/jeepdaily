@@ -10,10 +10,10 @@ from playwright.sync_api import sync_playwright
 # --- FIX IMPORT STEALTH ---
 try:
     from playwright_stealth import stealth_sync as stealth_func
-except (ImportError, AttributeError):
+except:
     try:
         from playwright_stealth import stealth as stealth_func
-    except (ImportError, AttributeError):
+    except:
         def stealth_func(page): pass
 
 # ==========================================
@@ -35,7 +35,7 @@ CONTENT_DIR = "content/articles"
 IMAGE_DIR = "static/images"
 
 # ==========================================
-# 🚀 SUBMIT INDEXING (LOG UTAMA)
+# 🚀 SUBMIT INDEXING (LOG UTAMA ANDA)
 # ==========================================
 def submit_indexing(slug):
     full_url = f"{WEBSITE_URL}/{slug}/"
@@ -51,7 +51,7 @@ def submit_indexing(slug):
     except Exception as e:
         log_event(f"      ❌ [INDEX ERROR] IndexNow Gagal: {e}")
 
-    # 2. Google Indexing
+    # 2. Google Indexing API
     if GOOGLE_JSON_KEY:
         try:
             from oauth2client.service_account import ServiceAccountCredentials
@@ -65,84 +65,90 @@ def submit_indexing(slug):
             log_event(f"      ❌ [INDEX ERROR] Google Gagal: {e}")
 
 # ==========================================
-# 🧠 PLAYWRIGHT ENGINE (SMART SELECTOR)
+# 🧠 PLAYWRIGHT ENGINE (ULTRA STEALTH)
 # ==========================================
 def generate_with_playwright(prompt):
     result_data = None
     img_src = None
     
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
+        # Gunakan Chrome asli jika memungkinkan, atau Chromium dengan flag stealth
+        browser = p.chromium.launch(headless=True, args=[
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+            "--disable-setuid-sandbox"
+        ])
+        
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+            viewport={'width': 1280, 'height': 720},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         )
+        
         page = context.new_page()
         if callable(stealth_func):
             stealth_func(page)
 
         try:
             log_event("      🌐 Membuka Grok.com...")
-            page.goto("https://grok.com/", timeout=90000)
+            # Kita tidak menunggu networkidle, tapi cukup domcontentloaded
+            page.goto("https://grok.com/", wait_until="domcontentloaded", timeout=60000)
             
             log_event("      🔑 Mengatur Session...")
             page.evaluate(f"window.localStorage.setItem('sso-token', '{GROK_SSO_TOKEN}')")
-            page.reload()
-            page.wait_for_load_state("networkidle")
+            page.goto("https://grok.com/", wait_until="domcontentloaded", timeout=60000)
+            
+            # Cek apakah ada Cloudflare Turnstile
             time.sleep(10)
+            if "Verify you are human" in page.content():
+                log_event("      ⚠️ Cloudflare Turnstile terdeteksi. Mencoba menunggu...")
+                time.sleep(15)
 
-            log_event("      ⌨️ Mencari Kotak Input Chat...")
+            log_event("      ⌨️ Mencari Kotak Input...")
+            # Grok sering menggunakan div dengan class ProseMirror atau role textbox
+            selectors = ['div[contenteditable="true"]', '[role="textbox"]', 'textarea', '.ProseMirror']
             
-            # Smart Selector: Mencoba beberapa elemen yang mungkin jadi kotak chat
-            input_selectors = [
-                'textarea', 
-                'div[contenteditable="true"]', 
-                '[role="textbox"]', 
-                '[placeholder*="Ask"]',
-                '.ProseMirror'
-            ]
+            input_found = False
+            for selector in selectors:
+                try:
+                    if page.is_visible(selector):
+                        page.click(selector)
+                        page.fill(selector, prompt)
+                        page.keyboard.press("Enter")
+                        input_found = True
+                        log_event(f"      ✅ Berhasil mengirim prompt via {selector}")
+                        break
+                except: continue
             
-            target_input = None
-            for selector in input_selectors:
-                if page.is_visible(selector):
-                    target_input = selector
-                    break
-            
-            if target_input:
-                log_event(f"      ✅ Kotak input ditemukan ({target_input}). Mengirim pesan...")
-                page.fill(target_input, prompt)
-                page.keyboard.press("Enter")
-            else:
-                log_event("      ⚠️ Selector standar tidak ditemukan. Mencoba klik koordinat tengah...")
-                # Fallback: Klik area bawah layar jika selector tidak ketemu
-                page.mouse.click(page.viewport_size["width"] / 2, page.viewport_size["height"] - 100)
+            if not input_found:
+                log_event("      ⚠️ Selector gagal. Mencoba mengetik langsung...")
+                page.mouse.click(640, 650) # Klik area bawah layar (input chat)
                 page.keyboard.type(prompt)
                 page.keyboard.press("Enter")
 
-            log_event("      ⏳ Menunggu AI memproses jawaban (80 detik)...")
-            time.sleep(80)
+            log_event("      ⏳ Menunggu AI memproses (90 detik)...")
+            # Menunggu teks hasil generate muncul
+            time.sleep(90)
 
-            raw_text = page.inner_text("body")
-            
-            # Cari JSON di dalam hasil chat
-            match = re.search(r'(\{.*\})', raw_text, re.DOTALL)
+            # Ekstrak Teks
+            body_text = page.inner_text("body")
+            match = re.search(r'(\{.*\})', body_text, re.DOTALL)
             if match:
                 try:
                     result_data = json.loads(match.group(1))
-                    log_event("      ✅ Konten JSON berhasil diekstrak.")
-                except:
-                    log_event("      ❌ Gagal parse JSON.")
+                    log_event("      ✅ JSON Konten Berhasil Diekstrak.")
+                except: log_event("      ❌ Gagal parse JSON.")
 
-            # Cari Gambar
+            # Ekstrak Gambar
             images = page.query_selector_all('img')
             for img in images:
                 src = img.get_attribute('src')
                 if src and ("generated" in src or "assets.grok.com" in src):
                     img_src = src
-                    log_event("      🎨 URL Gambar ditemukan.")
+                    log_event("      🎨 Gambar Berhasil Ditemukan.")
                     break
 
         except Exception as e:
-            log_event(f"      ❌ Browser Error: {e}")
+            log_event(f"      ❌ Playwright Error: {e}")
         
         browser.close()
     return result_data, img_src
@@ -152,10 +158,13 @@ def generate_with_playwright(prompt):
 # ==========================================
 def main():
     for d in [CONTENT_DIR, IMAGE_DIR]: os.makedirs(d, exist_ok=True)
-    log_event("🔥 JEEP ENGINE STARTED (SMART SELECTOR) 🔥")
+    log_event("🔥 JEEP ENGINE STARTED (ANTI-TIMEOUT MODE) 🔥")
 
     feed = feedparser.parse("https://news.google.com/rss/search?q=Jeep+Wrangler&hl=en-US")
-    
+    if not feed.entries:
+        log_event("❌ RSS Kosong.")
+        return
+
     for entry in feed.entries[:1]:
         clean_title = entry.title.split(" - ")[0]
         slug = slugify(clean_title, max_length=50)
@@ -168,15 +177,15 @@ def main():
         log_event(f"      📝 Memproses: {clean_title}")
         
         prompt = (
-            f"Write a professional 1000-word SEO article about: {clean_title}. "
-            f"Structure with H2 and H3. Respond ONLY with a JSON object containing: "
-            f"'seo_title', 'meta_desc', 'content_markdown'."
+            f"Act as an auto journalist. Write a 1000-word SEO article about: {clean_title}. "
+            f"Use H2, H3. Respond ONLY with a valid JSON: "
+            f"{{\"seo_title\": \"...\", \"meta_desc\": \"...\", \"content_markdown\": \"...\"}}"
         )
         
         data, img_src = generate_with_playwright(prompt)
 
         if not data or 'content_markdown' not in data:
-            log_event("      ❌ Gagal mendapatkan konten. Skip.")
+            log_event("      ❌ Konten gagal dibuat. Mengakhiri sesi.")
             continue
 
         # Simpan Gambar
@@ -184,13 +193,13 @@ def main():
         if img_src:
             try:
                 import requests
-                img_resp = requests.get(img_src, timeout=20)
-                img = Image.open(BytesIO(img_resp.content)).convert("RGB")
+                resp = requests.get(img_src, timeout=20)
+                img = Image.open(BytesIO(resp.content)).convert("RGB")
                 draw = ImageDraw.Draw(img)
                 draw.text((20, 20), "@JeepDaily", fill=(255, 255, 255))
                 img.save(f"{IMAGE_DIR}/{slug}.webp", "WEBP")
                 img_url = f"/images/{slug}.webp"
-                log_event("      ✅ Gambar Disimpan.")
+                log_event("      ✅ Gambar disimpan.")
             except: pass
 
         # Simpan Markdown
@@ -202,16 +211,16 @@ description: "{data.get('meta_desc', '').replace('"', "'")}"
 slug: "{slug}"
 url: "/{slug}/"
 ---
-{data.get('content_markdown', 'Content Error')}
+{data.get('content_markdown', '')}
 """
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(md_content)
         
-        log_event("      ✅ File Markdown Berhasil Dibuat.")
+        log_event("      ✅ Artikel Berhasil Ditulis.")
 
-        # SUBMIT INDEXING (Log Indexing Pasti Muncul jika File Jadi)
+        # --- SUBMIT INDEXING (LOG WAJIB MUNCUL DISINI) ---
         submit_indexing(slug)
-        log_event(f"✅ PROSES SELESAI: {slug}")
+        log_event(f"✅ SUCCESS PUBLISH: {slug}")
 
 if __name__ == "__main__":
     main()
