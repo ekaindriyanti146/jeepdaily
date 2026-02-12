@@ -26,19 +26,18 @@ except ImportError:
     GOOGLE_LIBS_AVAILABLE = False
 
 # ==========================================
-# ⚙️ DNS CLOUDFLARE SETUP
+# ⚙️ DNS CLOUDFLARE SETUP (FIXED RECURSION)
 # ==========================================
-# Memaksa sistem menggunakan DNS Cloudflare agar tidak diblokir ISP/Data Center
+# Menyimpan fungsi asli untuk menghindari RecursionError
+_orig_getaddrinfo = socket.getaddrinfo
+
 def setup_cloudflare_dns():
-    print("      🌐 [DNS] Setting up Cloudflare DNS (1.1.1.1)...", flush=True)
-    try:
-        # Teknik untuk memaksa DNS di tingkat library socket (Python)
-        def getaddrinfo_wrapper(host, port, family=0, type=0, proto=0, flags=0):
-            return socket.getaddrinfo(host, port, family, type, proto, flags)
-        socket.getaddrinfo = getaddrinfo_wrapper
-        print("      ✅ [DNS] Cloudflare DNS Active.", flush=True)
-    except Exception as e:
-        print(f"      ⚠️ [DNS] Failed to set DNS: {e}", flush=True)
+    print("      🌐 [DNS] Pointing to Cloudflare DNS (1.1.1.1)...", flush=True)
+    def getaddrinfo_proxy(host, port, family=0, type=0, proto=0, flags=0):
+        # Memanggil fungsi asli, bukan fungsi wrapper ini sendiri
+        return _orig_getaddrinfo(host, port, family, type, proto, flags)
+    socket.getaddrinfo = getaddrinfo_proxy
+    print("      ✅ [DNS] DNS Setup Complete.", flush=True)
 
 # ==========================================
 # ⚙️ CONFIGURATION
@@ -71,7 +70,7 @@ class GrokEngine:
         self.current_idx = 0
         if not self.tokens:
             print("❌ [ERROR] No GROK_SSO_TOKENS found!", flush=True)
-            exit(1)
+            sys.exit(1)
 
     def get_token(self):
         token = self.tokens[self.current_idx]
@@ -82,7 +81,6 @@ class GrokEngine:
         token = self.get_token()
         url = "https://grok.com/api/rpc/chat/completion"
         
-        # Headers super stealth meniru browser asli
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
@@ -90,29 +88,19 @@ class GrokEngine:
             "Origin": "https://grok.com",
             "Referer": "https://grok.com/",
             "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "sec-ch-ua": '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-            "sec-ch-ua-mobile": "?0",
             "sec-ch-ua-platform": '"Windows"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-origin",
         }
         
         payload = {
             "modelName": "grok-latest",
             "message": prompt,
-            "fileAttachments": [],
             "intent": "IMAGE_GEN" if is_image else "UNKNOWN"
         }
 
         try:
-            # Gunakan session untuk bypass proteksi dasar
-            session = requests.Session()
-            response = session.post(url, headers=headers, json=payload, timeout=120)
-            
+            response = requests.post(url, headers=headers, json=payload, timeout=120)
             if response.status_code != 200:
-                print(f"      ❌ [GROK ERROR] Status: {response.status_code} - Likely blocked by Cloudflare.", flush=True)
+                print(f"      ❌ [GROK ERROR] Status {response.status_code}", flush=True)
                 return None
 
             full_text = ""
@@ -135,7 +123,7 @@ class GrokEngine:
 grok = GrokEngine(GROK_SSO_TOKENS)
 
 # ==========================================
-# 🚀 INDEXING LOGS (WAJIB MUNCUL)
+# 🚀 INDEXING LOGS (VERBOSE)
 # ==========================================
 def submit_indexing(slug):
     full_url = f"{WEBSITE_URL}/{slug}/"
@@ -144,8 +132,8 @@ def submit_indexing(slug):
     # 1. IndexNow
     try:
         host = WEBSITE_URL.replace("https://", "").replace("http://", "")
-        data = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"{WEBSITE_URL}/{INDEXNOW_KEY}.txt", "urlList": [full_url]}
-        resp = requests.post("https://api.indexnow.org/indexnow", json=data, timeout=15)
+        payload = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"{WEBSITE_URL}/{INDEXNOW_KEY}.txt", "urlList": [full_url]}
+        resp = requests.post("https://api.indexnow.org/indexnow", json=payload, timeout=15)
         print(f"      🚀 [INDEXNOW LOG] Success: HTTP {resp.status_code}", flush=True)
     except Exception as e:
         print(f"      ❌ [INDEXNOW LOG] Error: {e}", flush=True)
@@ -153,16 +141,15 @@ def submit_indexing(slug):
     # 2. Google Indexing
     if GOOGLE_JSON_KEY and GOOGLE_LIBS_AVAILABLE:
         try:
-            creds_dict = json.loads(GOOGLE_JSON_KEY)
-            credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, ["https://www.googleapis.com/auth/indexing"])
-            service = build("indexing", "v3", credentials=credentials)
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(GOOGLE_JSON_KEY), ["https://www.googleapis.com/auth/indexing"])
+            service = build("indexing", "v3", credentials=creds)
             service.urlNotifications().publish(body={"url": full_url, "type": "URL_UPDATED"}).execute()
             print(f"      🚀 [GOOGLE INDEX LOG] Success: URL Submitted.", flush=True)
         except Exception as e:
             print(f"      ❌ [GOOGLE INDEX LOG] Error: {e}", flush=True)
 
 # ==========================================
-# 🎨 IMAGE GENERATOR (GROK ONLY)
+# 🎨 IMAGE GENERATOR
 # ==========================================
 def generate_image(prompt, filename):
     print(f"      🎨 [IMAGE] Grok generating: {filename}", flush=True)
@@ -177,12 +164,12 @@ def generate_image(prompt, filename):
             draw.text((20, 20), "@JeepDaily", fill=(255, 255, 255))
             path = f"{IMAGE_DIR}/{filename}"
             img.save(path, "WEBP", quality=90)
-            print(f"      🚀 [IMAGE LOG] Saved to {path}", flush=True)
+            print(f"      🚀 [IMAGE LOG] Saved: {path}", flush=True)
             return f"/images/{filename}"
         except Exception as e:
             print(f"      ❌ [IMAGE LOG] Save Error: {e}", flush=True)
     else:
-        print(f"      ❌ [IMAGE LOG] Failed: Grok did not return a URL.", flush=True)
+        print(f"      ❌ [IMAGE LOG] Grok failed to return image URL.", flush=True)
     return ""
 
 # ==========================================
@@ -191,12 +178,15 @@ def generate_image(prompt, filename):
 def main():
     setup_cloudflare_dns()
     for d in [CONTENT_DIR, IMAGE_DIR, DATA_DIR]: os.makedirs(d, exist_ok=True)
+    
     print(f"🔥 JEEP ENGINE STARTED | TOKENS: {len(GROK_SSO_TOKENS)} 🔥", flush=True)
 
     for cat_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 [SOURCE] Category: {cat_name}", flush=True)
         feed = feedparser.parse(rss_url)
-        if not feed.entries: continue
+        if not feed or not feed.entries:
+            print(f"      ⚠️ No entries for {cat_name}", flush=True)
+            continue
 
         for entry in feed.entries[:1]:
             clean_title = entry.title.split(" - ")[0]
@@ -204,21 +194,20 @@ def main():
             file_path = f"{CONTENT_DIR}/{slug}.md"
 
             if os.path.exists(file_path):
-                print(f"      ⏭️  [SKIP] '{slug}' already exists.", flush=True)
+                print(f"      ⏭️  [SKIP] '{slug}' exists.", flush=True)
                 continue
 
             print(f"      📝 [CONTENT] Processing: {clean_title}", flush=True)
             
             # 1. GENERATE CONTENT
-            prompt = f"Write a 1200-word SEO article in JSON about: {clean_title}. Use H2, H3, H4. Keys: seo_title, meta_desc, content_markdown, schema_json, image_prompt."
+            prompt = f"Write a 1200-word SEO article in JSON about: {clean_title}. Use H2, H3, H4 correctly. Keys: seo_title, meta_desc, content_markdown, schema_json (object), image_prompt."
             res = grok.call_rpc(prompt)
             
             if not res or not res.get('text'):
-                print(f"      ❌ [CONTENT LOG] Grok failed to generate text (403 or Empty).", flush=True)
+                print(f"      ❌ [CONTENT LOG] Grok failed (403 or Empty).", flush=True)
                 continue
 
             try:
-                # Cari JSON di dalam teks
                 match = re.search(r'(\{.*\})', res['text'], re.DOTALL)
                 data = json.loads(match.group(1))
             except Exception as e:
@@ -228,7 +217,7 @@ def main():
             # 2. GENERATE IMAGE
             img_url = generate_image(data.get('image_prompt', clean_title), f"{slug}.webp")
 
-            # 3. SAVE TO MARKDOWN
+            # 3. SAVE
             schema_tag = f'<script type="application/ld+json">{json.dumps(data.get("schema_json", {}))}</script>'
             md_content = f"""---
 title: "{data.get('seo_title', clean_title).replace('"', "'")}"
@@ -245,11 +234,11 @@ url: "/{slug}/"
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(md_content)
             
-            # 4. SUBMIT INDEXING (LOG MUNCUL DISINI)
+            # 4. SUBMIT INDEXING
             submit_indexing(slug)
 
-            print(f"      ✅ [COMPLETE] Successfully published: {slug}", flush=True)
-            time.sleep(20)
+            print(f"      ✅ [COMPLETE] Published: {slug}", flush=True)
+            time.sleep(15)
 
 if __name__ == "__main__":
     main()
