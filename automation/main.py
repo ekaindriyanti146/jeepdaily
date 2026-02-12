@@ -26,8 +26,6 @@ except ImportError:
 # ==========================================
 # ⚙️ CONFIGURATION & ENV VARIABLES
 # ==========================================
-
-# Ambil token dari GitHub Secrets (format: token1,token2)
 GROK_KEYS_RAW = os.environ.get("GROK_SSO_TOKENS", "") 
 GROK_SSO_TOKENS = [k.strip() for k in GROK_KEYS_RAW.split(",") if k.strip()]
 
@@ -40,7 +38,6 @@ IMAGE_DIR = "static/images"
 DATA_DIR = "automation/data"
 MEMORY_FILE = f"{DATA_DIR}/link_memory.json"
 
-# Niche RSS Sources
 RSS_SOURCES = {
     "Wrangler Life": "https://news.google.com/rss/search?q=Jeep+Wrangler+Review+News&hl=en-US&gl=US&ceid=US:en",
     "Off-road Tips": "https://news.google.com/rss/search?q=Offroad+4x4+Adventure+Tips&hl=en-US&gl=US&ceid=US:en",
@@ -49,15 +46,14 @@ RSS_SOURCES = {
 }
 
 # ==========================================
-# 🔄 GROK SSO ENGINE (TOKEN ROTATOR)
+# 🔄 GROK ENGINE (ROBUST VERSION)
 # ==========================================
-
 class GrokEngine:
     def __init__(self, tokens):
         self.tokens = tokens
         self.current_idx = 0
         if not self.tokens:
-            print("❌ ERROR: No GROK_SSO_TOKENS found in Environment Variables!")
+            print("❌ FATAL: No GROK_SSO_TOKENS found!")
             exit(1)
 
     def get_token(self):
@@ -65,7 +61,7 @@ class GrokEngine:
         self.current_idx = (self.current_idx + 1) % len(self.tokens)
         return token
 
-    def call_rpc(self, prompt, is_image=False):
+    def call_grok(self, prompt, is_image=False):
         token = self.get_token()
         url = "https://grok.com/api/rpc/chat/completion"
         headers = {
@@ -83,21 +79,21 @@ class GrokEngine:
         }
 
         try:
-            # Stream=True karena Grok menggunakan SSE (Server Side Events)
-            response = requests.post(url, headers=headers, json=payload, stream=True, timeout=180)
+            # Gunakan POST tanpa streaming untuk mendapatkan response utuh (lebih stabil untuk JSON besar)
+            response = requests.post(url, headers=headers, json=payload, timeout=180)
+            
+            if response.status_code != 200:
+                print(f"      ❌ Grok Error {response.status_code}: {response.text[:200]}")
+                return None
+
             full_text = ""
             image_url = ""
-
-            for line in response.iter_lines():
-                if not line: continue
-                line_text = line.decode('utf-8')
-                
-                # Buang prefix 'data: ' jika ada
-                if line_text.startswith("data: "):
-                    line_text = line_text[6:]
-                
+            
+            # Parsing NDJSON response dari Grok
+            for line in response.text.splitlines():
+                if not line.strip(): continue
                 try:
-                    chunk = json.loads(line_text)
+                    chunk = json.loads(line)
                     res = chunk.get("result", {}).get("response", {})
                     if "token" in res:
                         full_text += res["token"]
@@ -107,180 +103,132 @@ class GrokEngine:
                                 image_url = att.get("url")
                 except:
                     continue
+            
             return {"text": full_text, "image_url": image_url}
         except Exception as e:
-            print(f"      ❌ Grok Connection Error: {e}")
+            print(f"      ❌ Connection Error: {e}")
             return None
 
 grok = GrokEngine(GROK_SSO_TOKENS)
 
 # ==========================================
-# 🧠 UTILS & SEO HELPERS
+# 🛠️ HELPERS
 # ==========================================
-
-def extract_json_from_text(text):
-    """Mengekstrak JSON dari teks menggunakan Regex agar lebih kuat"""
+def extract_json(text):
     try:
-        # Cari pola { ... } yang paling luar
         match = re.search(r'(\{.*\})', text, re.DOTALL)
         if match:
             return json.loads(match.group(1))
     except Exception as e:
-        print(f"      ⚠️ JSON Extraction Error: {e}")
+        print(f"      ⚠️ JSON Parse Error: {e}")
     return None
 
-def load_link_memory():
+def load_memory():
     if not os.path.exists(MEMORY_FILE): return {}
-    try:
-        with open(MEMORY_FILE, 'r', encoding='utf-8') as f: return json.load(f)
-    except: return {}
+    with open(MEMORY_FILE, 'r', encoding='utf-8') as f: return json.load(f)
 
-def save_link_to_memory(title, slug):
+def save_memory(title, slug):
     os.makedirs(DATA_DIR, exist_ok=True)
-    memory = load_link_memory()
-    memory[title] = f"/{slug}/"
-    if len(memory) > 300: memory = dict(list(memory.items())[-300:])
-    with open(MEMORY_FILE, 'w', encoding='utf-8') as f:
-        json.dump(memory, f, indent=2)
+    mem = {}
+    if os.path.exists(MEMORY_FILE):
+        with open(MEMORY_FILE, 'r', encoding='utf-8') as f: mem = json.load(f)
+    mem[title] = f"/{slug}/"
+    with open(MEMORY_FILE, 'w', encoding='utf-8') as f: json.dump(mem, f, indent=2)
 
-def get_internal_links_html():
-    memory = load_link_memory()
-    if not memory: return ""
-    items = list(memory.items())
-    selected = random.sample(items, min(len(items), 3))
-    links = "".join([f'<li><a href="{url}">{title}</a></li>' for title, url in selected])
-    return f'<div class="related-posts"><h3>Explore More Jeep Stories</h3><ul>{links}</ul></div>'
+def get_internal_links():
+    if not os.path.exists(MEMORY_FILE): return ""
+    with open(MEMORY_FILE, 'r', encoding='utf-8') as f:
+        mem = json.load(f)
+        if not mem: return ""
+        items = list(mem.items())
+        selected = random.sample(items, min(len(items), 3))
+        links = "".join([f'<li><a href="{u}">{t}</a></li>' for t, u in selected])
+        return f'<div><h3>Related Jeep News</h3><ul>{links}</ul></div>'
 
 # ==========================================
-# 🚀 INDEXING LOGS
+# 🚀 INDEXING (GOOGLE & INDEXNOW)
 # ==========================================
-
-def submit_indexing(slug):
-    full_url = f"{WEBSITE_URL}/{slug}/"
+def run_indexing(slug):
+    url = f"{WEBSITE_URL}/{slug}/"
+    print(f"      🚀 Indexing: {url}")
     
-    # 1. IndexNow
+    # IndexNow
     try:
         host = WEBSITE_URL.replace("https://", "").replace("http://", "")
-        data = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"{WEBSITE_URL}/{INDEXNOW_KEY}.txt", "urlList": [full_url]}
-        requests.post("https://api.indexnow.org/indexnow", json=data, timeout=10)
-        print(f"      🚀 IndexNow Log: {full_url} -> Submitted")
+        payload = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"{WEBSITE_URL}/{INDEXNOW_KEY}.txt", "urlList": [url]}
+        r = requests.post("https://api.indexnow.org/indexnow", json=payload, timeout=10)
+        print(f"      ✅ IndexNow: {r.status_code}")
     except: pass
 
-    # 2. Google Indexing API
+    # Google
     if GOOGLE_JSON_KEY and GOOGLE_LIBS_AVAILABLE:
         try:
-            creds_dict = json.loads(GOOGLE_JSON_KEY)
-            credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, ["https://www.googleapis.com/auth/indexing"])
-            service = build("indexing", "v3", credentials=credentials)
-            service.urlNotifications().publish(body={"url": full_url, "type": "URL_UPDATED"}).execute()
-            print(f"      🚀 Google Index Log: {full_url} -> Success")
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(GOOGLE_JSON_KEY), ["https://www.googleapis.com/auth/indexing"])
+            service = build("indexing", "v3", credentials=creds)
+            service.urlNotifications().publish(body={"url": url, "type": "URL_UPDATED"}).execute()
+            print(f"      ✅ Google Indexing: Success")
         except Exception as e:
-            print(f"      ❌ Google Index Error: {e}")
-
-# ==========================================
-# 🎨 IMAGE GENERATOR
-# ==========================================
-
-def generate_image(prompt, filename):
-    print(f"      🎨 Grok is drawing...")
-    styled_prompt = f"{prompt}, cartoon vector art, gta loading screen style, thick outlines, flat vibrant colors, 8k resolution"
-    res = grok.call_rpc(styled_prompt, is_image=True)
-    if res and res['image_url']:
-        try:
-            img_data = requests.get(res['image_url']).content
-            img = Image.open(BytesIO(img_data)).convert("RGB")
-            draw = ImageDraw.Draw(img)
-            # Watermark simpel
-            draw.text((20, 20), "@JeepDaily", fill=(255, 255, 255))
-            output_path = f"{IMAGE_DIR}/{filename}"
-            img.save(output_path, "WEBP", quality=90)
-            return f"/images/{filename}"
-        except: pass
-    return ""
-
-# ==========================================
-# 📝 ARTICLE GENERATOR
-# ==========================================
-
-def generate_article_data(title, summary, source_link):
-    author = random.choice(["Rick O'Connell", "Sarah Miller", "Mike Stevens", "Elena Forza"])
-    prompt = f"""
-    Write a 1000-word SEO article about: "{title}".
-    Context: {summary}
-    Source: {source_link}
-
-    YOU MUST RESPOND ONLY WITH A VALID JSON OBJECT.
-    JSON Structure:
-    {{
-      "seo_title": "Professional SEO Title",
-      "meta_desc": "Meta description 160 chars",
-      "category": "Pick one (Wrangler Life, Off-road Tips, Jeep Mods, Classic Jeep)",
-      "tags": ["tag1", "tag2"],
-      "content_markdown": "Detailed article with H2, H3, H4, a technical table, and a pro-tip box.",
-      "schema_json": {{ "@context": "https://schema.org", "@type": "Article", "headline": "..." }},
-      "image_prompt": "Vector cartoon description for image generation"
-    }}
-    """
-    
-    print(f"      🤖 Grok is writing content...")
-    res = grok.call_rpc(prompt)
-    if res and res['text']:
-        data = extract_json_from_text(res['text'])
-        if data:
-            return data, author
-        else:
-            print(f"      ❌ Failed to parse JSON. Preview: {res['text'][:100]}...")
-    return None, None
+            print(f"      ❌ Google Error: {e}")
 
 # ==========================================
 # 🏁 MAIN WORKFLOW
 # ==========================================
-
 def main():
-    # Buat folder jika belum ada
-    for d in [CONTENT_DIR, IMAGE_DIR, DATA_DIR]:
-        os.makedirs(d, exist_ok=True)
-
+    for d in [CONTENT_DIR, IMAGE_DIR, DATA_DIR]: os.makedirs(d, exist_ok=True)
     print(f"🔥 JEEP ENGINE STARTED | TOKENS: {len(GROK_SSO_TOKENS)} 🔥")
 
-    for cat, rss_url in RSS_SOURCES.items():
-        print(f"\n📡 Source: {cat}")
+    for cat_name, rss_url in RSS_SOURCES.items():
+        print(f"\n📡 Source: {cat_name}")
         feed = feedparser.parse(rss_url)
-        
-        if not feed.entries:
-            print("      ⚠️ Feed empty.")
-            continue
+        if not feed.entries: continue
 
-        for entry in feed.entries[:1]: # 1 Artikel per sumber
+        for entry in feed.entries[:1]:
             clean_title = entry.title.split(" - ")[0]
             slug = slugify(clean_title, max_length=50)
-            file_path = f"{CONTENT_DIR}/{slug}.md"
-
-            if os.path.exists(file_path):
+            if os.path.exists(f"{CONTENT_DIR}/{slug}.md"):
                 print(f"      ⏭️ Skipping: {slug}")
                 continue
 
             print(f"      📝 Processing: {clean_title}")
             
-            # 1. Teks
-            data, author = generate_article_data(clean_title, entry.summary, entry.link)
-            if not data: continue
+            # 1. GENERATE CONTENT
+            prompt = f"Write a 1000-word SEO article in JSON about: {clean_title}. Context: {entry.summary}. Source: {entry.link}. JSON keys: seo_title, meta_desc, content_body, schema_json (as object), image_prompt."
+            res = grok.call_grok(prompt)
+            
+            if not res or not res['text']:
+                print("      ❌ Grok returned no text. Check SSO tokens.")
+                continue
+                
+            data = extract_json(res['text'])
+            if not data:
+                print(f"      ❌ JSON Parse failed. Raw length: {len(res['text'])}")
+                continue
 
-            # 2. Gambar
-            image_url = generate_image(data.get('image_prompt', clean_title), f"{slug}.webp")
+            # 2. GENERATE IMAGE
+            print(f"      🎨 Generating Image...")
+            img_res = grok.call_grok(data.get('image_prompt', clean_title) + ", cartoon gta style", is_image=True)
+            img_path = ""
+            if img_res and img_res['image_url']:
+                try:
+                    img_data = requests.get(img_res['image_url']).content
+                    img = Image.open(BytesIO(img_data)).convert("RGB")
+                    draw = ImageDraw.Draw(img)
+                    draw.text((10, 10), "@JeepDaily", fill=(255,255,255))
+                    img.save(f"{IMAGE_DIR}/{slug}.webp", "WEBP")
+                    img_path = f"/images/{slug}.webp"
+                    print("      ✅ Image Saved")
+                except: print("      ⚠️ Image save failed")
 
-            # 3. Internal Link & Schema
-            internal_links = get_internal_links_html()
-            schema_tag = f'<script type="application/ld+json">\n{json.dumps(data.get("schema_json", {}))}\n</script>'
-
-            # 4. Assembly Markdown
-            md_content = f"""---
+            # 3. ASSEMBLE & SAVE
+            internal_links = get_internal_links()
+            schema_tag = f'<script type="application/ld+json">{json.dumps(data.get("schema_json", {}))}</script>'
+            
+            md = f"""---
 title: "{data.get('seo_title', clean_title).replace('"', "'")}"
 date: {datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00")}
-author: "{author}"
-categories: ["{data.get('category', cat)}"]
-tags: {json.dumps(data.get('tags', []))}
-featured_image: "{image_url}"
+author: "Rick O'Connell"
+categories: ["{cat_name}"]
+featured_image: "{img_path}"
 description: "{data.get('meta_desc', '').replace('"', "'")}"
 slug: "{slug}"
 url: "/{slug}/"
@@ -288,26 +236,24 @@ url: "/{slug}/"
 
 {schema_tag}
 
-{data.get('content_markdown', 'Content error.')}
+{data.get('content_body', 'Content Error')}
 
 <hr>
-
 {internal_links}
 
 ---
-*Reference: Analysis by {author} based on [{clean_title}]({entry.link}).*
+*Reference: Analysis by Rick O'Connell based on [{clean_title}]({entry.link}).*
 """
-            # Simpan
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(md_content)
+            with open(f"{CONTENT_DIR}/{slug}.md", "w", encoding="utf-8") as f:
+                f.write(md)
             
-            save_link_to_memory(data.get('seo_title', clean_title), slug)
+            save_memory(data.get('seo_title', clean_title), slug)
             
-            # 5. Indexing
-            submit_indexing(slug)
-
-            print(f"      ✅ DONE: {slug}")
-            time.sleep(30) # Jeda antar artikel
+            # 4. INDEXING
+            run_indexing(slug)
+            
+            print(f"      ✅ SUCCESSFULLY PUBLISHED: {slug}")
+            time.sleep(15)
 
 if __name__ == "__main__":
     main()
