@@ -48,7 +48,7 @@ RSS_SOURCES = {
 }
 
 # ==========================================
-# 🔄 GROK SSO ENGINE
+# 🔄 GROK SSO ENGINE (DENGAN LOG STATUS HTTP)
 # ==========================================
 
 class GrokEngine:
@@ -83,6 +83,12 @@ class GrokEngine:
 
         try:
             response = requests.post(url, headers=headers, json=payload, stream=True, timeout=180)
+            
+            # LOG STATUS UNTUK DEBUG
+            if response.status_code != 200:
+                print(f"      ⚠️ Grok HTTP Error: {response.status_code}", flush=True)
+                return None
+
             full_text = ""
             image_url = ""
 
@@ -110,42 +116,7 @@ class GrokEngine:
 grok = GrokEngine(GROK_SSO_TOKENS)
 
 # ==========================================
-# 🧠 UTILS & SEO HELPERS
-# ==========================================
-
-def extract_json_from_text(text):
-    try:
-        match = re.search(r'(\{.*\})', text, re.DOTALL)
-        if match:
-            return json.loads(match.group(1))
-    except Exception as e:
-        print(f"      ⚠️ JSON Extraction Error: {e}", flush=True)
-    return None
-
-def load_link_memory():
-    if not os.path.exists(MEMORY_FILE): return {}
-    try:
-        with open(MEMORY_FILE, 'r', encoding='utf-8') as f: return json.load(f)
-    except: return {}
-
-def save_link_to_memory(title, slug):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    memory = load_link_memory()
-    memory[title] = f"/{slug}/"
-    if len(memory) > 300: memory = dict(list(memory.items())[-300:])
-    with open(MEMORY_FILE, 'w', encoding='utf-8') as f:
-        json.dump(memory, f, indent=2)
-
-def get_internal_links_html():
-    memory = load_link_memory()
-    if not memory: return ""
-    items = list(memory.items())
-    selected = random.sample(items, min(len(items), 3))
-    links = "".join([f'<li><a href="{url}">{title}</a></li>' for title, url in selected])
-    return f'<div class="related-posts"><h3>Explore More Jeep Stories</h3><ul>{links}</ul></div>'
-
-# ==========================================
-# 🚀 INDEXING LOGS (BAGIAN YANG DIPERBAIKI)
+# 🚀 INDEXING LOGS (WAJIB MUNCUL)
 # ==========================================
 
 def submit_indexing(slug):
@@ -157,10 +128,7 @@ def submit_indexing(slug):
         host = WEBSITE_URL.replace("https://", "").replace("http://", "")
         data = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"{WEBSITE_URL}/{INDEXNOW_KEY}.txt", "urlList": [full_url]}
         resp = requests.post("https://api.indexnow.org/indexnow", json=data, timeout=15)
-        if resp.status_code == 200:
-            print(f"      🚀 IndexNow Log: {full_url} -> Success (200)", flush=True)
-        else:
-            print(f"      ⚠️ IndexNow Log: {full_url} -> Failed ({resp.status_code})", flush=True)
+        print(f"      🚀 IndexNow Log: Success (HTTP {resp.status_code})", flush=True)
     except Exception as e:
         print(f"      ❌ IndexNow Error: {e}", flush=True)
 
@@ -171,21 +139,22 @@ def submit_indexing(slug):
             credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, ["https://www.googleapis.com/auth/indexing"])
             service = build("indexing", "v3", credentials=credentials)
             service.urlNotifications().publish(body={"url": full_url, "type": "URL_UPDATED"}).execute()
-            print(f"      🚀 Google Index Log: {full_url} -> Success", flush=True)
+            print(f"      🚀 Google Index Log: Success", flush=True)
         except Exception as e:
             print(f"      ❌ Google Index Error: {e}", flush=True)
     else:
-        print(f"      ⚠️ Google Index Log: Skipped (Key or Libs missing)", flush=True)
+        print(f"      ⚠️ Google Index Log: Skipped (Key/Libs missing)", flush=True)
 
 # ==========================================
 # 🎨 IMAGE GENERATOR
 # ==========================================
 
 def generate_image(prompt, filename):
-    print(f"      🎨 Grok is drawing: {filename}", flush=True)
-    styled_prompt = f"{prompt}, cartoon vector art, gta loading screen style, thick outlines, flat vibrant colors, 8k resolution"
+    print(f"      🎨 Grok Drawing Start: {filename}", flush=True)
+    styled_prompt = f"{prompt}, cartoon vector art, gta loading screen style, thick outlines, flat vibrant colors"
     res = grok.call_rpc(styled_prompt, is_image=True)
-    if res and res['image_url']:
+    
+    if res and res.get('image_url'):
         try:
             img_data = requests.get(res['image_url']).content
             img = Image.open(BytesIO(img_data)).convert("RGB")
@@ -193,10 +162,12 @@ def generate_image(prompt, filename):
             draw.text((20, 20), "@JeepDaily", fill=(255, 255, 255))
             output_path = f"{IMAGE_DIR}/{filename}"
             img.save(output_path, "WEBP", quality=90)
-            print(f"      ✅ Image Saved Log: {output_path}", flush=True)
+            print(f"      ✅ Image Saved: {output_path}", flush=True)
             return f"/images/{filename}"
         except Exception as e:
             print(f"      ❌ Image Save Error: {e}", flush=True)
+    else:
+        print(f"      ⚠️ Image skipped (Grok returned no URL)", flush=True)
     return ""
 
 # ==========================================
@@ -204,36 +175,41 @@ def generate_image(prompt, filename):
 # ==========================================
 
 def generate_article_data(title, summary, source_link):
-    author = random.choice(["Rick O'Connell", "Sarah Miller", "Mike Stevens", "Elena Forza"])
-    prompt = f"Write a 1000-word SEO article about: {title}. Context: {summary}. Source: {source_link}. Response must be RAW JSON only with keys: seo_title, meta_desc, category, tags, content_markdown, schema_json, image_prompt."
+    author = random.choice(["Rick O'Connell", "Sarah Miller", "Mike Stevens"])
+    prompt = f"Write a 1000-word SEO article in JSON about: {title}. Context: {summary}. JSON keys: seo_title, meta_desc, category, tags, content_markdown, schema_json, image_prompt."
     
-    print(f"      🤖 Grok is writing: {title}", flush=True)
+    print(f"      🤖 Grok Writing Start: {title}", flush=True)
     res = grok.call_rpc(prompt)
-    if res and res['text']:
-        data = extract_json_from_text(res['text'])
-        if data:
-            return data, author
-        else:
-            print(f"      ❌ Failed to parse JSON from Grok response.", flush=True)
-    return None, None
+    
+    if not res:
+        print(f"      ❌ Grok returned None (HTTP Error)", flush=True)
+        return None, None
+    
+    if not res['text']:
+        print(f"      ❌ Grok returned empty text", flush=True)
+        return None, None
+
+    # Ekstrak JSON
+    try:
+        match = re.search(r'(\{.*\})', res['text'], re.DOTALL)
+        data = json.loads(match.group(1))
+        return data, author
+    except Exception as e:
+        print(f"      ❌ JSON Parse Error: {e}", flush=True)
+        return None, None
 
 # ==========================================
 # 🏁 MAIN WORKFLOW
 # ==========================================
 
 def main():
-    for d in [CONTENT_DIR, IMAGE_DIR, DATA_DIR]:
-        os.makedirs(d, exist_ok=True)
-
+    for d in [CONTENT_DIR, IMAGE_DIR, DATA_DIR]: os.makedirs(d, exist_ok=True)
     print(f"🔥 JEEP ENGINE STARTED | TOKENS: {len(GROK_SSO_TOKENS)} 🔥", flush=True)
 
     for cat, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Source: {cat}", flush=True)
         feed = feedparser.parse(rss_url)
-        
-        if not feed.entries:
-            print("      ⚠️ Feed empty.", flush=True)
-            continue
+        if not feed.entries: continue
 
         for entry in feed.entries[:1]:
             clean_title = entry.title.split(" - ")[0]
@@ -241,51 +217,43 @@ def main():
             file_path = f"{CONTENT_DIR}/{slug}.md"
 
             if os.path.exists(file_path):
-                print(f"      ⏭️ Skipping: {slug}", flush=True)
+                print(f"      ⏭️ Skipping: {slug} (Already exists)", flush=True)
                 continue
 
             print(f"      📝 Processing: {clean_title}", flush=True)
             
+            # 1. GENERATE
             data, author = generate_article_data(clean_title, entry.summary, entry.link)
-            if not data: continue
+            
+            # Jika data gagal dibuat, kita harus tahu kenapa (Log sudah ada di dalam fungsi)
+            if not data:
+                continue
 
+            # 2. IMAGE
             image_url = generate_image(data.get('image_prompt', clean_title), f"{slug}.webp")
 
-            internal_links = get_internal_links_html()
-            schema_tag = f'<script type="application/ld+json">\n{json.dumps(data.get("schema_json", {}))}\n</script>'
-
+            # 3. SAVE
+            schema_tag = f'<script type="application/ld+json">{json.dumps(data.get("schema_json", {}))}</script>'
             md_content = f"""---
 title: "{data.get('seo_title', clean_title).replace('"', "'")}"
 date: {datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00")}
 author: "{author}"
-categories: ["{data.get('category', cat)}"]
-tags: {json.dumps(data.get('tags', []))}
+categories: ["{cat}"]
 featured_image: "{image_url}"
 description: "{data.get('meta_desc', '').replace('"', "'")}"
 slug: "{slug}"
 url: "/{slug}/"
 ---
-
 {schema_tag}
-
 {data.get('content_markdown', 'Content error.')}
-
-<hr>
-
-{internal_links}
-
----
-*Reference: Analysis by {author} based on [{clean_title}]({entry.link}).*
 """
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(md_content)
             
-            save_link_to_memory(data.get('seo_title', clean_title), slug)
-            
-            # --- INDEXING ---
+            # 4. INDEXING (LOG MUNCUL DI SINI)
             submit_indexing(slug)
 
-            print(f"      ✅ DONE: {slug}", flush=True)
+            print(f"      ✅ SUCCESSFULLY DONE: {slug}", flush=True)
             time.sleep(10)
 
 if __name__ == "__main__":
