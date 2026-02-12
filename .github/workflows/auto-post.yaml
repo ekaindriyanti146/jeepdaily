@@ -24,7 +24,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install playwright playwright-stealth feedparser python-slugify pillow oauth2client google-api-python-client requests pytz
+          pip install curl_cffi feedparser python-slugify pillow oauth2client google-api-python-client requests pytz
           
       - name: Run Content Engine
         env:
