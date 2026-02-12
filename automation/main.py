@@ -1,21 +1,14 @@
-import os
-import json
-import time
-import re
-import random
-import sys
-import uuid
+import os, json, time, re, random, sys
 from datetime import datetime
 from slugify import slugify
 from io import BytesIO
 from PIL import Image, ImageDraw
 import feedparser
-
-# WAJIB: curl_cffi untuk bypass sidik jari TLS Cloudflare
-from curl_cffi import requests
+from playwright.sync_api import sync_playwright
+from playwright_stealth import stealth_sync
 
 # ==========================================
-# 🚀 VERBOSE LOGGING
+# 🚀 SYSTEM LOGGING
 # ==========================================
 def log_event(msg):
     timestamp = datetime.now().strftime('%H:%M:%S')
@@ -24,120 +17,31 @@ def log_event(msg):
 # ==========================================
 # ⚙️ CONFIGURATION
 # ==========================================
-GROK_KEYS_RAW = os.environ.get("GROK_SSO_TOKENS", "") 
-GROK_SSO_TOKENS = [k.strip() for k in GROK_KEYS_RAW.split(",") if k.strip()]
-GROK_COOKIES = os.environ.get("GROK_COOKIES", "") # AMBIL COOKIE UTUH DARI BROWSER
-
-WEBSITE_URL = "https://dother.biz.id" 
-INDEXNOW_KEY = "e74819b68a0f40e98f6ec3dc24f610f0" 
-GOOGLE_JSON_KEY = os.environ.get("GOOGLE_INDEXING_KEY", "") 
-
-CONTENT_DIR = "content/articles" 
+GROK_SSO_TOKEN = os.environ.get("GROK_SSO_TOKENS", "").split(",")[0] # Ambil 1 token utama
+WEBSITE_URL = "https://dother.biz.id"
+INDEXNOW_KEY = "e74819b68a0f40e98f6ec3dc24f610f0"
+GOOGLE_JSON_KEY = os.environ.get("GOOGLE_INDEXING_KEY", "")
+CONTENT_DIR = "content/articles"
 IMAGE_DIR = "static/images"
 
-RSS_SOURCES = {
-    "Wrangler News": "https://news.google.com/rss/search?q=Jeep+Wrangler+News&hl=en-US",
-    "Jeep Mods": "https://news.google.com/rss/search?q=Jeep+Modifications&hl=en-US"
-}
-
 # ==========================================
-# 🔄 GROK ENGINE (ULTRA STEALTH)
-# ==========================================
-class GrokEngine:
-    def __init__(self, tokens):
-        self.tokens = tokens
-        self.current_idx = 0
-
-    def get_token(self):
-        if not self.tokens: return None
-        token = self.tokens[self.current_idx]
-        self.current_idx = (self.current_idx + 1) % len(self.tokens)
-        return token
-
-    def call_rpc(self, prompt, is_image=False):
-        token = self.get_token()
-        if not token: return None
-        
-        url = "https://grok.com/api/rpc/chat/completion"
-        
-        # Headers mengikuti struktur backend yang Anda kirim (Stealth Mode)
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Cookie": GROK_COOKIES,
-            "x-sso-token": token,
-            "x-statsig-id": str(uuid.uuid4()), # Unik sesuai file config.py
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Origin": "https://grok.com",
-            "Referer": "https://grok.com/",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-origin",
-        }
-        
-        payload = {
-            "modelName": "grok-latest",
-            "message": prompt,
-            "fileAttachments": [],
-            "intent": "IMAGE_GEN" if is_image else "UNKNOWN"
-        }
-
-        try:
-            # Menggunakan impersonate chrome110 (Paling stabil untuk menembus 403)
-            response = requests.post(
-                url, 
-                headers=headers, 
-                json=payload, 
-                impersonate="chrome110", 
-                timeout=120
-            )
-            
-            if response.status_code != 200:
-                log_event(f"      ❌ [API LOG] Status {response.status_code}. Cloudflare/Grok memblokir request.")
-                return None
-
-            full_text = ""
-            image_url = ""
-            for line in response.text.splitlines():
-                if not line.strip(): continue
-                try:
-                    chunk = json.loads(line)
-                    res_part = chunk.get("result", {}).get("response", {})
-                    if "token" in res_part:
-                        full_text += res_part["token"]
-                    if "attachments" in res_part:
-                        for att in res_part["attachments"]:
-                            if att.get("type") == "image":
-                                image_url = att.get("url")
-                except: continue
-                
-            return {"text": full_text, "image_url": image_url}
-        except Exception as e:
-            log_event(f"      ❌ [API LOG] Error Koneksi: {e}")
-            return None
-
-grok = GrokEngine(GROK_SSO_TOKENS)
-
-# ==========================================
-# 🚀 SUBMIT INDEXING (LOG WAJIB MUNCUL SETELAH FILE JADI)
+# 🚀 SUBMIT INDEXING (LOG UTAMA)
 # ==========================================
 def submit_indexing(slug):
     full_url = f"{WEBSITE_URL}/{slug}/"
-    log_event(f"      📡 [INDEXING] Memproses submit untuk: {full_url}")
+    log_event(f"      📡 [INDEXING] Memulai proses submit untuk: {full_url}")
     
-    # 1. IndexNow (Bing/Yandex)
+    # 1. IndexNow
     try:
+        import requests
         host = "dother.biz.id"
-        data = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"https://{host}/{INDEXNOW_KEY}.txt", "urlList": [full_url]}
-        r = requests.post("https://api.indexnow.org/indexnow", json=data, timeout=10)
-        log_event(f"      🚀 [INDEX LOG] IndexNow Status: {r.status_code} (Success)")
+        data = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"{WEBSITE_URL}/{INDEXNOW_KEY}.txt", "urlList": [full_url]}
+        resp = requests.post("https://api.indexnow.org/indexnow", json=data, timeout=15)
+        log_event(f"      🚀 [INDEX LOG] IndexNow Status: {resp.status_code}")
     except Exception as e:
-        log_event(f"      ❌ [INDEX LOG] IndexNow Failed: {e}")
+        log_event(f"      ❌ [INDEX ERROR] IndexNow Gagal: {e}")
 
-    # 2. Google Indexing API
+    # 2. Google Indexing
     if GOOGLE_JSON_KEY:
         try:
             from oauth2client.service_account import ServiceAccountCredentials
@@ -145,9 +49,65 @@ def submit_indexing(slug):
             creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(GOOGLE_JSON_KEY), ["https://www.googleapis.com/auth/indexing"])
             service = build("indexing", "v3", credentials=creds)
             service.urlNotifications().publish(body={"url": full_url, "type": "URL_UPDATED"}).execute()
-            log_event(f"      🚀 [INDEX LOG] Google Index: Berhasil Terkirim.")
+            log_event(f"      🚀 [INDEX LOG] Google Index: Berhasil.")
         except Exception as e:
-            log_event(f"      ❌ [INDEX LOG] Google Index Failed: {e}")
+            log_event(f"      ❌ [INDEX ERROR] Google Gagal: {e}")
+
+# ==========================================
+# 🧠 PLAYWRIGHT ENGINE (BYPASS CLOUDFLARE)
+# ==========================================
+def generate_with_playwright(prompt):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True) # Headless=True untuk GitHub Actions
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
+        stealth_sync(page) # Menghapus sidik jari bot
+
+        # 1. Buka Grok & Set Token
+        log_event("      🌐 Membuka Grok.com...")
+        page.goto("https://grok.com/")
+        
+        # Masukkan token ke LocalStorage (cara Grok menyimpan session)
+        page.evaluate(f"window.localStorage.setItem('sso-token', '{GROK_SSO_TOKEN}')")
+        page.reload()
+        time.sleep(5)
+
+        # 2. Ketik Prompt
+        log_event("      ⌨️ Mengetik prompt ke Grok...")
+        page.fill('textarea', prompt)
+        page.press('textarea', 'Enter')
+
+        # 3. Tunggu respon selesai (biasanya ditandai tombol 'stop' hilang atau teks berhenti mengalir)
+        log_event("      ⏳ Menunggu Grok menulis (biasanya 30-60 detik)...")
+        time.sleep(45) 
+
+        # 4. Ambil Konten
+        content = page.inner_text('body') # Mengambil seluruh teks halaman
+        
+        # Cari pola JSON dalam halaman
+        match = re.search(r'(\{.*\})', content, re.DOTALL)
+        result = None
+        if match:
+            try:
+                result = json.loads(match.group(1))
+                log_event("      ✅ Konten JSON berhasil diambil.")
+            except:
+                log_event("      ❌ Gagal parse JSON dari teks browser.")
+        
+        # 5. Cari Image URL (Grok Image Tag)
+        image_url = ""
+        images = page.query_selector_all('img')
+        for img in images:
+            src = img.get_attribute('src')
+            if "generated" in src or "assets.grok.com" in src:
+                image_url = src
+                log_event(f"      🎨 Gambar ditemukan: {image_url[:50]}...")
+                break
+
+        browser.close()
+        return result, image_url
 
 # ==========================================
 # 🏁 MAIN WORKFLOW
@@ -155,63 +115,60 @@ def submit_indexing(slug):
 def main():
     os.makedirs(CONTENT_DIR, exist_ok=True)
     os.makedirs(IMAGE_DIR, exist_ok=True)
+    log_event("🔥 JEEP ENGINE STARTED (PLAYWRIGHT MODE) 🔥")
+
+    # RSS Logic
+    feed = feedparser.parse("https://news.google.com/rss/search?q=Jeep+Wrangler&hl=en-US")
     
-    log_event(f"🔥 JEEP ENGINE STARTED | TOKENS: {len(GROK_SSO_TOKENS)}")
+    for entry in feed.entries[:1]: # 1 Artikel per run
+        clean_title = entry.title.split(" - ")[0]
+        slug = slugify(clean_title, max_length=50)
+        file_path = f"{CONTENT_DIR}/{slug}.md"
 
-    for cat, rss_url in RSS_SOURCES.items():
-        log_event(f"\n📡 SUMBER: {cat}")
-        feed = feedparser.parse(rss_url)
-        if not feed.entries: continue
+        if os.path.exists(file_path):
+            log_event(f"      ⏭️ [SKIP] {slug} sudah ada.")
+            continue
 
-        for entry in feed.entries[:1]:
-            clean_title = entry.title.split(" - ")[0]
-            slug = slugify(clean_title, max_length=50)
-            file_path = f"{CONTENT_DIR}/{slug}.md"
+        log_event(f"      📝 Memproses: {clean_title}")
+        
+        # GENERATE PAKAI BROWSER ASLI
+        prompt = f"Write a 1000-word SEO article in JSON format about: {clean_title}. Keys: seo_title, meta_desc, content_markdown."
+        data, img_src = generate_with_playwright(prompt)
 
-            if os.path.exists(file_path):
-                log_event(f"      ⏭️ [SKIP] Sudah ada: {slug}")
-                continue
+        if not data:
+            log_event("      ❌ Grok Gagal. Cloudflare Turnstile mungkin muncul.")
+            continue
 
-            # 1. GENERATE ARTIKEL
-            log_event(f"      📝 [CONTENT] Sedang menulis: {clean_title}")
-            res = grok.call_rpc(f"Write a 1000-word SEO article in JSON format about: {clean_title}. Keys: seo_title, content_markdown, image_prompt.")
-            
-            if not res or not res.get('text'):
-                log_event("      ❌ [STOP] Gagal tembus Cloudflare (403). Log Indexing tidak dipanggil karena artikel tidak jadi.")
-                continue
-
+        # DOWNLOAD GAMBAR
+        img_path = ""
+        if img_src:
             try:
-                # Parsing JSON
-                data = json.loads(re.search(r'(\{.*\})', res['text'], re.DOTALL).group(1))
-                
-                # 2. GENERATE GAMBAR
-                log_event("      🎨 [IMAGE] Generate Gambar...")
-                img_res = grok.call_rpc(data.get('image_prompt', clean_title), is_image=True)
-                img_path = ""
-                if img_res and img_res.get('image_url'):
-                    try:
-                        img_data = requests.get(img_res['image_url']).content
-                        img = Image.open(BytesIO(img_data)).convert("RGB")
-                        draw = ImageDraw.Draw(img)
-                        draw.text((20, 20), "@JeepDaily", fill=(255, 255, 255))
-                        img.save(f"{IMAGE_DIR}/{slug}.webp", "WEBP")
-                        img_path = f"/images/{slug}.webp"
-                        log_event("      ✅ [IMAGE LOG] Gambar disimpan.")
-                    except: log_event("      ❌ [IMAGE LOG] Simpan gambar gagal.")
+                import requests
+                img_data = requests.get(img_src).content
+                img = Image.open(BytesIO(img_data)).convert("RGB")
+                draw = ImageDraw.Draw(img)
+                draw.text((10, 10), "@JeepDaily", fill=(255, 255, 255))
+                img.save(f"{IMAGE_DIR}/{slug}.webp", "WEBP")
+                img_path = f"/images/{slug}.webp"
+                log_event("      ✅ Gambar disimpan.")
+            except: pass
 
-                # 3. SIMPAN FILE (Konten Berhasil Terbuat)
-                md_body = f"---\ntitle: \"{data.get('seo_title', clean_title)}\"\ndate: {datetime.now().isoformat()}\nfeatured_image: \"{img_path}\"\nslug: \"{slug}\"\nurl: \"/{slug}/\"\n---\n{data.get('content_markdown', 'Error')}"
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(md_body)
-                
-                # 4. SUBMIT INDEXING (LOG MUNCUL DI SINI)
-                submit_indexing(slug)
-                log_event(f"      ✅ [SUCCESS] ARTIKEL SELESAI: {slug}")
-
-            except Exception as e:
-                log_event(f"      ❌ [ERROR] Gagal memproses data JSON Grok: {e}")
-
-            time.sleep(10)
+        # SAVE MARKDOWN
+        md_content = f"""---
+title: "{data.get('seo_title', clean_title)}"
+date: {datetime.now().strftime('%Y-%m-%dT%H:%M:%S+00:00')}
+featured_image: "{img_path}"
+description: "{data.get('meta_desc', '')}"
+slug: "{slug}"
+---
+{data.get('content_markdown', 'Error')}
+"""
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(md_content)
+        
+        # SUBMIT INDEXING (LOG PASTI MUNCUL)
+        submit_indexing(slug)
+        log_event(f"✅ SUCCESS: {slug}")
 
 if __name__ == "__main__":
     main()
