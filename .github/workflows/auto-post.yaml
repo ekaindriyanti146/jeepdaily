@@ -1,4 +1,4 @@
-name: Auto Post Sport News
+name: Auto Post JeepDaily
 
 on:
   schedule:
@@ -35,7 +35,7 @@ jobs:
       - name: Commit and Push
         run: |
           git config --global user.name "SportBot"
-          git config --global user.email "bot@Sportdaily.com"
+          git config --global user.email "bot@Jeepdaily.com"
           
           git add .
           
