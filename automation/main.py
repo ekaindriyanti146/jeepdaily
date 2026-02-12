@@ -7,6 +7,7 @@ import re
 import random
 import warnings 
 import string
+from urllib.parse import quote
 from datetime import datetime
 from slugify import slugify
 from io import BytesIO
@@ -41,26 +42,101 @@ if not GROQ_API_KEYS:
     exit(1)
 
 # ==========================================
-# 📸 DATABASE GAMBAR (HANYA JEEP & OFFROAD)
+# 🎨 POLLINATIONS AI ENGINE (CARTOON/VECTOR STYLE)
 # ==========================================
-# ID ini sudah dikurasi. Isinya: Wrangler, Rubicon, Gladiator, dan Trail.
-JEEP_IDS = [
-    "1533473359331-0135ef1b58bf", "1519241047957-b8d092bf028e", "1605559424843-9e4c228d9c68",
-    "1506015391300-4802dc74de2e", "1568285201-168d6945821c", "1626243836043-34e85741f0b1",
-    "1535446937720-e9cad5377719", "1585848520031-72782e564d26", "1564500096238-76903f56d0d2",
-    "1542362567-b2bb40a59565", "1615901323330-811c77f0438c", "1606820311337-3367f0b982f5",
-    "1620300484797-2a45638a168b", "1591462319086-4f90113f9f3b", "1547449547-410a768f5611",
-    "1631553109355-1f8102d96924", "1574045330831-50e561a3575c", "1517544845501-bb7810f66d8e",
-    "1503376763036-066120622c74", "1587572236509-32366254877e", "1559416523-140ddc3d2e52",
-    "1595209936856-11f26f284e36", "1508357757967-0c7f3b8fce08", "1623886745145-6a56e07663d2",
-    "1494905998402-395d5c8eb7c9", "1537248530342-6e2c340d8594", "1654536376510-449339f47879",
-    "1612454848508-412217122131", "1550609148-375494d3856d", "1625406080358-1c42f02542a4",
-    "1580273916550-e323be2f8160", "1594056729002-3c467657929d", "1492144534655-ae79c964c9d7",
-    "1530232464733-1466048d0870", "1566060143896-1c865147517c", "1618420653063-228741366113",
-    "1512404285859-69f69137d57a", "1504215680494-cf56012895d4", "1536411232873-6c827364b58e",
-    "1617788138017-80ad40651399", "1603584173870-7f23fdae1b5a", "1519681395684-d9598e15133c",
-    "1464822759023-fed622ff2c3b", "1469130198188-466c9869852f", "1500530855697-b586d89ba3ee"
-]
+
+def add_watermark(img):
+    """Menambahkan watermark @JeepDaily dengan shadow agar terbaca jelas"""
+    try:
+        img = img.convert("RGB")
+        draw = ImageDraw.Draw(img)
+        text = "@JeepDaily"
+        
+        # Coba load font tebal, fallback ke default
+        try:
+            # Path font umum di server Linux/Ubuntu
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
+        except:
+            font = ImageFont.load_default()
+            
+        # Posisi Kanan Atas (Margin 40px)
+        img_w, img_h = img.size
+        text_bbox = draw.textbbox((0, 0), text, font=font)
+        text_w = text_bbox[2] - text_bbox[0]
+        text_h = text_bbox[3] - text_bbox[1]
+        
+        x = img_w - text_w - 40
+        y = 40
+        
+        # Shadow Effect (Hitam Transparan)
+        draw.text((x+3, y+3), text, fill=(0, 0, 0, 160), font=font)
+        # Main Text (Putih Terang)
+        draw.text((x, y), text, fill=(255, 255, 255, 240), font=font)
+        
+        return img
+    except Exception as e:
+        print(f"      ⚠️ Watermark error: {e}")
+        return img
+
+def generate_cartoon_image(keyword, filename):
+    """
+    Generate gambar unik via Pollinations.ai dengan style Kartun/Vektor.
+    """
+    if not os.path.exists(IMAGE_DIR): os.makedirs(IMAGE_DIR, exist_ok=True)
+    output_path = f"{IMAGE_DIR}/{filename}"
+    
+    # Bersihkan keyword
+    clean_keyword = keyword.replace('"', '').replace("'", "").strip()
+    
+    # Random Seed = Kunci keunikan gambar (biar ga pernah sama)
+    seed = random.randint(1, 999999999)
+    
+    # Prompt Engineering Khusus:
+    # Memaksa gaya "Vector Art" / "GTA Loading Screen Style" yang keren buat blog otomotif
+    prompt = (
+        f"detailed vector art illustration of {clean_keyword}, jeep wrangler rubicon offroad action, "
+        f"dynamic angle, vibrant colors, flat shading, grand theft auto loading screen style, "
+        f"highly detailed, 8k resolution, cinematic lighting, masterpiece"
+    )
+    
+    encoded_prompt = quote(prompt)
+    
+    # URL Pollinations
+    image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&seed={seed}&nologo=true&model=flux"
+    
+    print(f"      🎨 Generating AI Art: '{clean_keyword}'")
+    
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    # Retry Logic (3x Percobaan)
+    for attempt in range(3):
+        try:
+            resp = requests.get(image_url, headers=headers, timeout=40)
+            if resp.status_code == 200:
+                img = Image.open(BytesIO(resp.content))
+                
+                # Tambah Watermark
+                img = add_watermark(img)
+                
+                # Simpan (High Quality WebP)
+                img.save(output_path, "WEBP", quality=92)
+                
+                # Validasi Ukuran File (Minimal 5KB)
+                if os.path.exists(output_path) and os.path.getsize(output_path) > 5000:
+                    return f"/images/{filename}"
+            else:
+                print(f"      ⚠️ Pollinations status: {resp.status_code}")
+                time.sleep(2)
+        except Exception as e:
+            print(f"      ❌ Image Gen Failed ({attempt+1}/3): {e}")
+            time.sleep(2)
+
+    # Fallback (Jangan sampai postingan gagal gara-gara gambar)
+    return "/images/default-jeep.webp"
+
+# ==========================================
+# ⚙️ STANDARD CONFIG
+# ==========================================
 
 AUTHOR_PROFILES = [
     "Rick 'Muddy' O'Connell (Off-road Expert)", 
@@ -86,7 +162,6 @@ CONTENT_DIR = "content/articles"
 IMAGE_DIR = "static/images"
 DATA_DIR = "automation/data"
 MEMORY_FILE = f"{DATA_DIR}/link_memory.json"
-HISTORY_FILE = f"{DATA_DIR}/used_images.json"
 TARGET_PER_SOURCE = 1 
 
 # ==========================================
@@ -153,125 +228,42 @@ def submit_to_google(url):
     except: pass
 
 # ==========================================
-# 🎨 IMAGE ENGINE (DATABASE + VISUAL REMIX)
-# ==========================================
-
-def load_image_history():
-    if not os.path.exists(HISTORY_FILE): return []
-    try:
-        with open(HISTORY_FILE, 'r') as f: return json.load(f)
-    except: return []
-
-def save_image_to_history(img_id):
-    history = load_image_history()
-    if img_id not in history:
-        history.append(img_id)
-        # Reset jika history kepenuhan agar bisa recycle
-        if len(history) >= len(JEEP_IDS): history = history[-20:]
-        with open(HISTORY_FILE, 'w') as f: json.dump(history, f)
-
-def modify_image(img):
-    """
-    Membuat gambar terlihat baru & unik dengan manipulasi visual.
-    """
-    try:
-        img = img.convert('RGB')
-        
-        # 1. Flip (Cermin) - 50% kemungkinan
-        if random.random() > 0.5:
-            img = ImageOps.mirror(img)
-            
-        # 2. Rotasi & Crop (Untuk mengubah struktur pixel/hash)
-        angle = random.uniform(-1.5, 1.5)
-        img = img.rotate(angle, resample=Image.BICUBIC, expand=False)
-        w, h = img.size
-        crop_v = 0.02
-        img = img.crop((w*crop_v, h*crop_v, w*(1-crop_v), h*(1-crop_v)))
-        img = img.resize((1200, 675), Image.Resampling.LANCZOS)
-
-        # 3. Color Grading (Mood)
-        # Agar tiap post beda nuansa (Pagi, Sore, High Contrast)
-        style = random.choice(['warm', 'cool', 'contrast'])
-        if style == 'warm': 
-            overlay = Image.new('RGB', img.size, (255, 180, 100))
-            img = Image.blend(img, overlay, 0.1)
-        elif style == 'cool':
-            overlay = Image.new('RGB', img.size, (100, 180, 255))
-            img = Image.blend(img, overlay, 0.1)
-        else:
-            img = ImageEnhance.Contrast(img).enhance(1.15)
-
-        # 4. Watermark (@JeepDaily)
-        draw = ImageDraw.Draw(img)
-        text = "@JeepDaily"
-        try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
-        except:
-            font = ImageFont.load_default()
-            
-        # Posisi text (Kanan Atas)
-        draw.text((1052, 42), text, fill=(0, 0, 0, 150), font=font) # Shadow
-        draw.text((1050, 40), text, fill=(255, 255, 255, 180), font=font) # Text
-        
-        return img
-    except:
-        return img
-
-def get_jeep_image(filename):
-    if not os.path.exists(IMAGE_DIR): os.makedirs(IMAGE_DIR, exist_ok=True)
-    output_path = f"{IMAGE_DIR}/{filename}"
-    
-    used_ids = load_image_history()
-    # Cari ID yang belum dipakai
-    available = [pid for pid in JEEP_IDS if pid not in used_ids]
-    
-    # Jika habis, pakai semua (recycle) tapi nanti di-remix visualnya
-    if not available:
-        available = JEEP_IDS
-        
-    selected_id = random.choice(available)
-    print(f"      🎨 Downloading Image ID: {selected_id}")
-
-    try:
-        url = f"https://images.unsplash.com/photo-{selected_id}?auto=format&fit=crop&w=1200&q=80"
-        resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20)
-        
-        if resp.status_code == 200:
-            img = Image.open(BytesIO(resp.content))
-            final_img = modify_image(img)
-            final_img.save(output_path, "WEBP", quality=85)
-            save_image_to_history(selected_id)
-            return f"/images/{filename}"
-    except Exception as e:
-        print(f"      ❌ Image Error: {e}")
-        
-    return "/images/default-jeep.webp"
-
-# ==========================================
-# 🧠 CONTENT ENGINE (RESTORED HIGH QUALITY)
+# 🧠 CONTENT ENGINE (SEO EXPERT MODE - H2/H3/H4)
 # ==========================================
 
 def get_groq_article_json(title, summary, link, author_name):
-    # Prompt ini dikembalikan ke versi LENGKAP agar artikel tidak rusak formatnya
+    # PROMPT PREMIUM: Memaksa struktur SEO yang benar
     system_prompt = f"""
-    You are {author_name}, a professional Automotive Journalist specializing in Jeep.
+    You are {author_name}, a Senior Automotive Journalist & SEO Specialist.
     
-    TASK: Write a comprehensive, high-quality blog post (approx 800-1000 words).
+    TASK: Write a comprehensive, highly structured blog post (1000+ words).
     
-    FORMATTING RULES (CRITICAL):
-    1. USE MARKDOWN syntax for all formatting.
-    2. Split the text into clear paragraphs. DO NOT write a wall of text.
-    3. Use H2 (##) for main sections and H3 (###) for subsections.
-    4. If discussing a vehicle model, INCLUDE A MARKDOWN TABLE of specs (Engine, HP, Torque, Towing).
-    5. Use bullet points for feature lists.
+    ### 1. STRUCTURE RULES (STRICT):
+    - **H1 (Title):** Already provided, do not repeat in body.
+    - **Introduction:** Hook the reader immediately. NO label "Introduction".
+    - **H2 (##):** Use at least 3-4 Main Headings for major topics.
+    - **H3 (###):** Use Sub-headings under H2 to break down complex ideas.
+    - **H4 (####):** Use for very specific technical details (e.g., "3.6L Pentastar V6 Specs").
+    - **Tables:** You MUST include a Markdown Table for specs, pros/cons, or comparisons.
+    - **Lists:** Use bullet points for features.
     
-    CONTENT RULES:
-    - Tone: Authoritative, enthusiastic, yet technical.
-    - NO generic intros like "In this article..." or "Let's dive in...".
-    - Focus on off-road capabilities, mechanics, and heritage.
+    ### 2. STYLE RULES:
+    - **Tone:** Authoritative, technical, yet accessible. 
+    - **Forbidden Words:** Do NOT use "In conclusion", "Overall", "Let's dive in", "Unleashing", "A tapestry of".
+    - **Perspective:** Write from experience (e.g., "When on the trail...").
     
-    OUTPUT FORMAT:
-    Return ONLY a JSON object with keys: "title", "description", "category", "tags", "content_body".
+    ### 3. SEO RULES:
+    - **Keywords:** Naturally weave the main topic into H2s and H3s.
+    - **Image Prompt:** Provide a specific 'main_keyword' for the AI image generator (e.g. "Green Jeep Wrangler Rubicon climbing rocky hill cartoon style").
+    
+    ### 4. OUTPUT FORMAT:
+    Return valid JSON with keys: 
+    - "title" (SEO optimized)
+    - "description" (Meta description, max 160 chars)
+    - "category" (Pick one: Wrangler Life, Classic Jeeps, Gladiator Truck, Off-road Tips)
+    - "main_keyword" (For image generation)
+    - "tags" (Array of strings)
+    - "content_body" (The full article in Markdown)
     """
     
     user_prompt = f"Topic: {title}\nSummary context: {summary}\nSource Link: {link}"
@@ -283,12 +275,14 @@ def get_groq_article_json(title, summary, link, author_name):
             completion = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                temperature=0.6,
-                max_tokens=6500,
+                temperature=0.6, # Agak rendah agar struktur konsisten
+                max_tokens=7000,
                 response_format={"type": "json_object"}
             )
             return completion.choices[0].message.content
-        except: continue
+        except Exception as e:
+            print(f"      ⚠️ AI Gen Error: {e}")
+            continue
     return None
 
 # ==========================================
@@ -299,7 +293,7 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print("🔥 JEEP ENGINE RESTARTED (FIXED FORMAT & IMAGES) 🔥")
+    print("🔥 JEEP ENGINE STARTED (SEO MODE + POLLINATIONS CARTOON) 🔥")
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Reading Source: {source_name}")
@@ -318,17 +312,20 @@ def main():
             
             author = random.choice(AUTHOR_PROFILES)
             
-            # Generate Artikel (Format JSON)
+            # 1. Generate Content (JSON)
             raw_json = get_groq_article_json(clean_title, entry.summary, entry.link, author)
             if not raw_json: continue
             
             try:
                 data = json.loads(raw_json)
                 
-                # Generate Gambar dari Database Jeep
-                final_img = get_jeep_image(f"{slug}.webp")
+                # 2. Generate Image (POLLINATIONS AI)
+                # Menggunakan keyword visual dari AI agar gambar 100% relevan
+                # Default ke title jika AI lupa ngasih keyword
+                image_keyword = data.get('main_keyword', clean_title)
+                final_img = generate_cartoon_image(image_keyword, f"{slug}.webp")
                 
-                # Format Body Markdown
+                # 3. Assemble Markdown
                 clean_body = clean_ai_content(data['content_body'])
                 links_md = get_internal_links_markdown()
                 final_body = clean_body + "\n\n### Explore More\n" + links_md
@@ -365,7 +362,9 @@ url: "/{slug}/"
 
                 print(f"      ✅ Successfully Published: {slug}")
                 processed += 1
-                time.sleep(5) # Jeda aman
+                
+                # Jeda wajib agar Pollinations tidak reject request kita
+                time.sleep(6) 
             except Exception as e:
                 print(f"      ❌ Critical Error: {e}")
 
