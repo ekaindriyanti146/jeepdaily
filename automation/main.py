@@ -65,33 +65,47 @@ CONTENT_DIR = "content/articles"
 IMAGE_DIR = "static/images"
 DATA_DIR = "automation/data"
 MEMORY_FILE = f"{DATA_DIR}/link_memory.json"
+USED_IMAGES_LOG = f"{DATA_DIR}/used_images_log.json" # Memori Gambar
 TARGET_PER_SOURCE = 1 
 
 # ==========================================
-# 📸 VERIFIED JEEP & NATURE QUEUE (MANUAL CURATED)
+# 📸 VERIFIED JEEP & NATURE POOL (MASSIVE COLLECTION)
 # ==========================================
-# Silakan cek ID ini satu per satu di unsplash.com/photos/[ID]
-# DIJAMIN: Tidak ada Sedan, Tidak ada BMW.
+
+# Koleksi 1: Jeep Spesifik (Wrangler, Gladiator, Rubicon, CJ)
+# Dijamin Mobil Jeep / 4x4 Offroad.
 JEEP_QUEUE = [
+    "1533473359331-0135ef1b58bf", "1519241047957-b8d092bf028e", "1605559424843-9e4c228d9c68",
     "1506015391300-4802dc74de2e", "1568285201-168d6945821c", "1626243836043-34e85741f0b1",
     "1535446937720-e9cad5377719", "1585848520031-72782e564d26", "1564500096238-76903f56d0d2",
     "1542362567-b2bb40a59565", "1615901323330-811c77f0438c", "1606820311337-3367f0b982f5",
     "1620300484797-2a45638a168b", "1591462319086-4f90113f9f3b", "1547449547-410a768f5611",
-    "1631553109355-1f8102d96924", "1574045330831-50e561a3575c", "1517544845501-bb7810f66d8e"
+    "1631553109355-1f8102d96924", "1574045330831-50e561a3575c", "1517544845501-bb7810f66d8e",
+    "1503376763036-066120622c74", "1587572236509-32366254877e", "1559416523-140ddc3d2e52",
+    "1595209936856-11f26f284e36", "1508357757967-0c7f3b8fce08", "1623886745145-6a56e07663d2",
+    "1494905998402-395d5c8eb7c9", "1537248530342-6e2c340d8594", "1654536376510-449339f47879",
+    "1612454848508-412217122131", "1550609148-375494d3856d", "1625406080358-1c42f02542a4",
+    "1580273916550-e323be2f8160", "1594056729002-3c467657929d", "1492144534655-ae79c964c9d7",
+    "1530232464733-1466048d0870", "1566060143896-1c865147517c", "1618420653063-228741366113",
+    "1512404285859-69f69137d57a", "1504215680494-cf56012895d4", "1536411232873-6c827364b58e"
 ]
 
+# Koleksi 2: Nature & Adventure (Gunung, Hutan, Jalur Tanah)
+# Digunakan jika stok Jeep habis atau topik umum offroad
 NATURE_QUEUE = [
     "1464822759023-fed622ff2c3b", "1469130198188-466c9869852f", "1500530855697-b586d89ba3ee",
-    "1446776811953-b23d57bd21aa", "1530232464733-1466048d0870", "1519681395684-d9598e15133c",
-    "1501785887741-f67207455dfb", "1506744038136-46273834b3fb", "1470770841072-c978cf4d019e"
+    "1446776811953-b23d57bd21aa", "1519681395684-d9598e15133c", "1501785887741-f67207455dfb",
+    "1506744038136-46273834b3fb", "1470770841072-c978cf4d019e", "1486870591958-9b9d011c7e3b",
+    "1454441879059-563d6d34375a", "1504280390367-361c6d9e0694", "1445363689158-af8a08647589",
+    "1470071459604-3b5ec3a7fe05", "1480497490787-505ec076689c", "1477346611705-654142777960",
+    "1511497584788-87a160234755", "1497449493050-aad1dad14f4d", "1501854140884-074cf2a02c52",
+    "1541893301-447a1599e574", "1518182177546-07661d8a2d34", "1465146344425-f00d5f5c8f07",
+    "1495571617469-c049aa7d377e", "1470165408479-7c223c348247", "1433840496881-cbd845bd798e",
+    "1482192505345-5655af888cc4", "1508138221679-760a23a2285b", "1502082553048-f009c371b9b5"
 ]
 
-# Acak antrean saat skrip mulai agar tidak selalu sama tiap hari
-random.shuffle(JEEP_QUEUE)
-random.shuffle(NATURE_QUEUE)
-
 # ==========================================
-# 🧠 HELPER FUNCTIONS
+# 🧠 HELPER FUNCTIONS (MEMORY & LOGS)
 # ==========================================
 def load_link_memory():
     if not os.path.exists(MEMORY_FILE): return {}
@@ -103,8 +117,22 @@ def save_link_to_memory(title, slug):
     os.makedirs(DATA_DIR, exist_ok=True)
     memory = load_link_memory()
     memory[title] = f"/articles/{slug}" 
-    if len(memory) > 200: memory = dict(list(memory.items())[-200:])
+    if len(memory) > 300: memory = dict(list(memory.items())[-300:])
     with open(MEMORY_FILE, 'w') as f: json.dump(memory, f, indent=2)
+
+def load_used_images_log():
+    if not os.path.exists(USED_IMAGES_LOG): return []
+    try:
+        with open(USED_IMAGES_LOG, 'r') as f: return json.load(f)
+    except: return []
+
+def save_image_to_log(image_id):
+    history = load_used_images_log()
+    if image_id not in history:
+        history.append(image_id)
+        # Simpan max 500 history gambar agar file tidak terlalu besar
+        if len(history) > 500: history = history[-500:] 
+        with open(USED_IMAGES_LOG, 'w') as f: json.dump(history, f)
 
 def get_internal_links_markdown():
     memory = load_link_memory()
@@ -129,7 +157,7 @@ def clean_ai_content(text):
     return text.strip()
 
 # ==========================================
-# 🚀 INDEXING LOGS (LENGKAP)
+# 🚀 INDEXING LOGS
 # ==========================================
 def submit_to_indexnow(url):
     try:
@@ -153,52 +181,85 @@ def submit_to_google(url):
     except: pass
 
 # ==========================================
-# 🎨 UNSPLASH ENGINE (QUEUE SYSTEM - NO DUPLICATES)
+# 🎨 UNSPLASH ENGINE (UNIQUE & CINEMATIC)
 # ==========================================
 
 def modify_image_to_be_unique(img):
     try:
-        # Flip & Random Slight Rotation (Digital Signature Change)
-        if random.random() > 0.5:
+        img = img.convert('RGB')
+        
+        # 1. Flip & Random Rotation (Ubah hash digital)
+        if random.random() > 0.6:
             img = ImageOps.mirror(img)
-        angle = random.uniform(-1.0, 1.0)
+        
+        # Rotasi sedikit (-2 sampai 2 derajat) agar grid pixel berubah total
+        angle = random.uniform(-2.0, 2.0)
         img = img.rotate(angle, resample=Image.BICUBIC, expand=False)
         
-        # Crop & Resize 16:9
+        # 2. Smart Crop & Resize 16:9
+        # Crop acak sedikit dari pinggir agar komposisi bergeser
         w, h = img.size
-        crop_v = random.uniform(0.04, 0.06)
-        img = img.crop((w*crop_v, h*crop_v, w*(1-crop_v), h*(1-crop_v)))
+        left = random.uniform(0, 0.05) * w
+        top = random.uniform(0, 0.05) * h
+        right = random.uniform(0.95, 1.0) * w
+        bottom = random.uniform(0.95, 1.0) * h
+        img = img.crop((left, top, right, bottom))
         img = img.resize((1200, 675), Image.Resampling.LANCZOS)
 
-        # Enhance Contrast & Vignette
-        img = ImageEnhance.Contrast(img).enhance(1.05)
+        # 3. Cinematic Color Grading (Agar visual beda tiap posting)
+        # Random: Warm (Sepia) atau Cool (Blueish) atau High Contrast
+        style = random.choice(['warm', 'cool', 'contrast', 'normal'])
+        
+        if style == 'warm':
+            # Tambah layer orange transparan (efek sore/gurun)
+            overlay = Image.new('RGB', img.size, (255, 180, 120))
+            img = Image.blend(img, overlay, 0.12)
+        elif style == 'cool':
+            # Tambah layer biru transparan (efek pegunungan/dingin)
+            overlay = Image.new('RGB', img.size, (150, 200, 255))
+            img = Image.blend(img, overlay, 0.12)
+        elif style == 'contrast':
+            img = ImageEnhance.Contrast(img).enhance(1.2)
+            img = ImageEnhance.Color(img).enhance(0.9) # Sedikit desaturate ala film
+
+        # Vignette Effect (Fokus ke tengah)
         vignette = Image.new('L', (1200, 675), 255)
         draw_v = ImageDraw.Draw(vignette)
-        draw_v.ellipse((-150, -150, 1350, 825), fill=0)
-        vignette = vignette.filter(ImageFilter.GaussianBlur(130))
+        draw_v.ellipse((-100, -100, 1300, 775), fill=0)
+        vignette = vignette.filter(ImageFilter.GaussianBlur(150))
         img = Image.composite(img, Image.new("RGB", (1200, 675), (15, 15, 15)), ImageOps.invert(vignette))
 
-        # ✨ WATERMARK @JeepDaily (UKURAN KECIL 18px & POSISI KANAN ATAS) ✨
+        # 4. Watermark @JeepDaily dengan Drop Shadow (Agar terbaca di background putih)
         txt_layer = Image.new('RGBA', (1200, 675), (255, 255, 255, 0))
         draw_txt = ImageDraw.Draw(txt_layer)
         try:
-            # Menggunakan font DejaVu Bold (standar Ubuntu/GitHub Actions)
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
+            # Cari font tebal sistem
+            font_paths = ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "arialbd.ttf", "Arial_Bold.ttf"]
+            font = None
+            for p in font_paths:
+                if os.path.exists(p):
+                    font = ImageFont.truetype(p, 20)
+                    break
+            if not font: font = ImageFont.load_default()
         except:
             font = ImageFont.load_default()
         
-        watermark_text = "@JeepDaily"
-        # Margin 50px agar tidak terpotong lengkungan desain web
-        text_x = 1200 - 120 - 50 
-        text_y = 50
+        text = "@JeepDaily"
+        # Posisi Kanan Atas
+        x_pos, y_pos = 1040, 50
         
-        draw_txt.text((text_x, text_y), watermark_text, fill=(255, 255, 255, 140), font=font)
+        # Shadow (Hitam Transparan)
+        draw_txt.text((x_pos+2, y_pos+2), text, fill=(0, 0, 0, 160), font=font) 
+        # Teks Utama (Putih Transparan)
+        draw_txt.text((x_pos, y_pos), text, fill=(255, 255, 255, 180), font=font)
         
         img = img.convert('RGBA')
         img = Image.alpha_composite(img, txt_layer)
         img = img.convert('RGB')
+        
         return img
-    except:
+    except Exception as e:
+        print(f"      ⚠️ Image Processing Error: {e}")
         return img
 
 def generate_unsplash_image(keyword, filename):
@@ -206,52 +267,78 @@ def generate_unsplash_image(keyword, filename):
     output_path = f"{IMAGE_DIR}/{filename}"
     keyword = keyword.lower()
     
-    # Pilih antrean pool berdasarkan keyword artikel
-    # Jika keyword mengandung Jeep, pakai JEEP_QUEUE, jika tidak pakai NATURE_QUEUE
-    pool = NATURE_QUEUE
-    if any(x in keyword for x in ['wrangler', 'gladiator', 'rubicon', 'sahara', 'jeep', '4x4']): 
-        pool = JEEP_QUEUE
-    
-    attempts = 0
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    # Load history gambar yang sudah dipakai
+    used_ids = load_used_images_log()
 
-    while attempts < 4:
-        # SISTEM POPS: Ambil ID paling depan dan hapus dari antrean agar tidak bisa duplikat
-        if len(pool) == 0:
-            # Jika antrean habis (misal buat artikel banyak banget), pakai fallback alam
-            pool = NATURE_QUEUE
-            if len(pool) == 0: break
-            
-        selected_id = pool.pop(0) # Ambil dan Hapus
-        
-        sig = "".join(random.choices(string.digits, k=6))
-        unsplash_url = f"https://images.unsplash.com/photo-{selected_id}?auto=format&fit=crop&w=1250&q=85&sig={sig}"
-        
+    # Tentukan Pool Gambar
+    # Prioritas 1: Jika keyword mengandung Jeep/4x4, pakai JEEP_QUEUE
+    is_jeep_content = any(x in keyword for x in ['wrangler', 'gladiator', 'rubicon', 'sahara', 'jeep', '4x4', 'truck', 'offroad'])
+    
+    target_pool = []
+    if is_jeep_content:
+        # Filter ID yang BELUM dipakai dari list JEEP
+        target_pool = [pid for pid in JEEP_QUEUE if pid not in used_ids]
+        # Jika stok Jeep habis, fallback ke stok Nature yang belum dipakai
+        if not target_pool:
+            target_pool = [pid for pid in NATURE_QUEUE if pid not in used_ids]
+    else:
+        # Jika bukan Jeep spesifik, pakai Nature
+        target_pool = [pid for pid in NATURE_QUEUE if pid not in used_ids]
+
+    # EMERGENCY FALLBACK: Jika SEMUA stok habis (sudah ratusan post), 
+    # reset pool tapi kita akan tetap memproses gambarnya agar terlihat beda (rotate/color)
+    if not target_pool:
+        print("      ⚠️ Stock Images Exhausted! Recycling images with modifications.")
+        target_pool = JEEP_QUEUE if is_jeep_content else NATURE_QUEUE
+        # Shuffle agar urutan recycle tidak sama
+        random.shuffle(target_pool)
+
+    # Pilih ID secara acak dari pool yang tersedia
+    selected_id = random.choice(target_pool)
+    
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    
+    # Download Logic
+    attempts = 0
+    while attempts < 2:
         try:
-            print(f"      🎨 Downloading Unique Post Image ID: {selected_id}")
+            # Tambahkan signature random di URL agar tidak di-cache oleh proxy/CDN
+            sig = "".join(random.choices(string.digits, k=5))
+            unsplash_url = f"https://images.unsplash.com/photo-{selected_id}?auto=format&fit=crop&w=1250&q=85&sig={sig}"
+            
+            print(f"      🎨 Downloading Image ID: {selected_id}")
             resp = requests.get(unsplash_url, headers=headers, timeout=25)
+            
             if resp.status_code == 200:
-                img = Image.open(BytesIO(resp.content)).convert("RGB")
-                img = modify_image_to_be_unique(img)
-                img.save(output_path, "WEBP", quality=85, method=6)
+                img = Image.open(BytesIO(resp.content))
                 
-                # VERIFIKASI KEAMANAN: Jika file di bawah 5KB berarti broken/gagal
-                if os.path.exists(output_path) and os.path.getsize(output_path) > 5120:
+                # Proses modifikasi visual
+                final_img = modify_image_to_be_unique(img)
+                
+                # Simpan WebP
+                final_img.save(output_path, "WEBP", quality=85)
+                
+                # VALIDASI UKURAN FILE (Pastikan tidak rusak/kosong)
+                if os.path.exists(output_path) and os.path.getsize(output_path) > 3000:
+                    # Catat ID ini sudah dipakai
+                    save_image_to_log(selected_id)
                     return f"/images/{filename}"
                 else:
-                    print(f"      ⚠️ Broken file detected for ID {selected_id}. Trying next in queue...")
-        except: pass
+                    print("      ⚠️ File too small or broken. Retrying...")
+            
+        except Exception as e:
+            print(f"      ❌ Image Download Error: {e}")
+        
         attempts += 1
         time.sleep(1)
 
-    return "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1200&q=80"
+    return "/images/default-jeep.webp"
 
 # ==========================================
-# 🧠 ANTI-GENERIC CONTENT ENGINE (STRICT PROMPT)
+# 🧠 ANTI-GENERIC CONTENT ENGINE
 # ==========================================
 
 def get_groq_article_json(title, summary, link, author_name):
-    current_date = datetime.now().strftime("%Y-%m-%d")
     system_prompt = f"""
     You are {author_name}, a Jeep Brand Specialist.
     TASK: Write a 1000-word authoritative article.
@@ -262,7 +349,6 @@ def get_groq_article_json(title, summary, link, author_name):
     - DO NOT use the word "Conclusion".
     - DO NOT use the word "Overview".
     - DO NOT use the word "Limitations".
-    - DO NOT use the word "Looking Ahead".
     
     ✅ POSITIVE CONSTRAINTS:
     - Headers (H2, H3) MUST be creative and specific to Jeep (e.g., "The Wrangler's 4:1 Transfer Case Explained").
@@ -289,14 +375,14 @@ def get_groq_article_json(title, summary, link, author_name):
     return None
 
 # ==========================================
-# 🏁 MAIN WORKFLOW (FULL 100%)
+# 🏁 MAIN WORKFLOW
 # ==========================================
 def main():
     os.makedirs(CONTENT_DIR, exist_ok=True)
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print("🔥 JEEP BRANDED ENGINE STARTED (STRICT NO-DUPLICATES) 🔥")
+    print("🔥 JEEP BRANDED ENGINE STARTED (UNIQUE IMAGES V2) 🔥")
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Reading Source: {source_name}")
@@ -319,8 +405,10 @@ def main():
             
             try:
                 data = json.loads(raw_json)
-                # Image Engine: Sistem Antrean (Queue) - Dijamin unik per sesi
-                final_img = generate_unsplash_image(data.get('main_keyword', clean_title), f"{slug}.webp")
+                
+                # IMAGE ENGINE: Generate Unique Jeep Image
+                main_keyword = data.get('main_keyword', clean_title)
+                final_img = generate_unsplash_image(main_keyword, f"{slug}.webp")
                 
                 clean_body = clean_ai_content(data['content_body'])
                 links_md = get_internal_links_markdown()
