@@ -24,10 +24,9 @@ def log_event(msg):
 # ==========================================
 # ⚙️ CONFIGURATION
 # ==========================================
-# Ambil dari GitHub Secrets
 GROK_KEYS_RAW = os.environ.get("GROK_SSO_TOKENS", "") 
 GROK_SSO_TOKENS = [k.strip() for k in GROK_KEYS_RAW.split(",") if k.strip()]
-GROK_COOKIES = os.environ.get("GROK_COOKIES", "") # WAJIB ISI COOKIE LENGKAP DARI BROWSER
+GROK_COOKIES = os.environ.get("GROK_COOKIES", "") 
 
 WEBSITE_URL = "https://dother.biz.id" 
 INDEXNOW_KEY = "e74819b68a0f40e98f6ec3dc24f610f0" 
@@ -42,7 +41,7 @@ RSS_SOURCES = {
 }
 
 # ==========================================
-# 🔄 GROK ENGINE (STEALTH MODE - CHROME 133)
+# 🔄 GROK ENGINE (FIXED IMPERSONATION)
 # ==========================================
 class GrokEngine:
     def __init__(self, tokens):
@@ -50,18 +49,19 @@ class GrokEngine:
         self.current_idx = 0
 
     def get_token(self):
+        if not self.tokens: return None
         token = self.tokens[self.current_idx]
         self.current_idx = (self.current_idx + 1) % len(self.tokens)
         return token
 
     def call_rpc(self, prompt, is_image=False):
         token = self.get_token()
-        url = "https://grok.com/api/rpc/chat/completion"
+        if not token: return None
         
-        # x-statsig-id dinamis sesuai pola file backend Anda
+        url = "https://grok.com/api/rpc/chat/completion"
         statsig_id = str(uuid.uuid4())
         
-        # HEADERS STEALTH TERLENGKAP (Meniru browser Chrome 133 asli)
+        # Headers tetap menggunakan string 133, tapi TLS pakai 110 agar tidak error library
         headers = {
             "Authorization": f"Bearer {token}",
             "Cookie": GROK_COOKIES,
@@ -69,16 +69,9 @@ class GrokEngine:
             "x-statsig-id": statsig_id,
             "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.9",
             "Origin": "https://grok.com",
             "Referer": "https://grok.com/",
-            "Sec-Ch-Ua": '"Not(A:Brand";v="99", "Google Chrome";v="133", "Chromium";v="133"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "Sec-Ch-Ua-Platform": '"Windows"',
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-origin",
+            "Accept": "*/*",
         }
         
         payload = {
@@ -88,17 +81,17 @@ class GrokEngine:
         }
 
         try:
-            # Gunakan impersonate="chrome133" sesuai file yang Anda berikan
+            # MENGGUNAKAN chrome110 (Paling stabil di library curl_cffi)
             response = requests.post(
                 url, 
                 headers=headers, 
                 json=payload, 
-                impersonate="chrome133", 
+                impersonate="chrome110", 
                 timeout=120
             )
             
             if response.status_code != 200:
-                log_event(f"      ❌ [BLOKIR CLOUDFLARE] Status {response.status_code}")
+                log_event(f"      ❌ [BLOKIR] Status {response.status_code}. Cloudflare mengenali bot atau Cookie salah.")
                 return None
 
             full_text = ""
@@ -128,13 +121,13 @@ grok = GrokEngine(GROK_SSO_TOKENS)
 # ==========================================
 def submit_indexing(slug):
     full_url = f"{WEBSITE_URL}/{slug}/"
-    log_event(f"      📡 [INDEXING] Mengirim URL ke Google & Bing: {full_url}")
+    log_event(f"      📡 [INDEXING] Memulai proses submit untuk: {full_url}")
     
     # 1. Bing (IndexNow)
     try:
         host = "dother.biz.id"
         data = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"https://{host}/{INDEXNOW_KEY}.txt", "urlList": [full_url]}
-        r = requests.post("https://api.indexnow.org/indexnow", json=data, timeout=10)
+        r = requests.post("https://api.indexnow.org/indexnow", json=data, timeout=10, impersonate="chrome110")
         log_event(f"      🚀 [INDEX LOG] IndexNow Status: {r.status_code} (Berhasil)")
     except Exception as e:
         log_event(f"      ❌ [INDEX LOG] IndexNow Gagal: {e}")
@@ -192,9 +185,8 @@ def main():
                 img_path = ""
                 if img_res and img_res.get('image_url'):
                     try:
-                        img_data = requests.get(img_res['image_url']).content
-                        img = Image.open(BytesIO(img_data)).convert("RGB")
-                        # Watermark
+                        img_resp = requests.get(img_res['image_url'], impersonate="chrome110")
+                        img = Image.open(BytesIO(img_resp.content)).convert("RGB")
                         draw = ImageDraw.Draw(img)
                         draw.text((20, 20), "@JeepDaily", fill=(255, 255, 255))
                         img.save(f"{IMAGE_DIR}/{slug}.webp", "WEBP")
@@ -207,7 +199,7 @@ def main():
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(md_body)
                 
-                # 4. SUBMIT INDEXING (HANYA JIKA FILE SUDAH TERTULIS)
+                # 4. SUBMIT INDEXING (LOG MUNCUL DISINI)
                 submit_indexing(slug)
                 log_event(f"      ✅ [SUCCESS] ARTIKEL SELESAI: {slug}")
 
