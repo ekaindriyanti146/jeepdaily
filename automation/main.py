@@ -40,7 +40,7 @@ if not GROQ_API_KEYS:
     print("❌ FATAL ERROR: Groq API Key is missing!")
     exit(1)
 
-# TIM PENULIS (OTOMOTIF EXPERT)
+# TIM PENULIS
 AUTHOR_PROFILES = [
     "Rick 'Muddy' O'Connell (Off-road Expert)", 
     "Sarah Miller (Automotive Historian)",
@@ -49,18 +49,13 @@ AUTHOR_PROFILES = [
     "Elena Forza (Car Design Analyst)"
 ]
 
-# KATEGORI JEEP (MICRO NICHE)
+# KATEGORI JEEP
 VALID_CATEGORIES = [
-    "Wrangler Life", 
-    "Classic Jeeps", 
-    "Grand Cherokee", 
-    "Gladiator Truck", 
-    "Off-road Tips", 
-    "Jeep History",
-    "Maintenance & Mods"
+    "Wrangler Life", "Classic Jeeps", "Grand Cherokee", 
+    "Gladiator Truck", "Off-road Tips", "Jeep History", "Maintenance & Mods"
 ]
 
-# RSS SOURCES (GOOGLE NEWS QUERY SPESIFIK JEEP)
+# RSS SOURCES
 RSS_SOURCES = {
     "Jeep Wrangler News": "https://news.google.com/rss/search?q=Jeep+Wrangler+Review+OR+News&hl=en-US&gl=US&ceid=US:en",
     "Jeep Gladiator": "https://news.google.com/rss/search?q=Jeep+Gladiator+News&hl=en-US&gl=US&ceid=US:en",
@@ -75,32 +70,32 @@ DATA_DIR = "automation/data"
 MEMORY_FILE = f"{DATA_DIR}/link_memory.json"
 TARGET_PER_SOURCE = 1 
 
+# Global Set untuk melacak gambar yang sudah digunakan agar tidak duplikat
+USED_IMAGE_IDS = set()
+
 # ==========================================
-# 📸 UNSPLASH POOL (JEEP SPECIFIC - ENHANCED)
+# 📸 KURASI TOTAL - 100% JEEP ONLY POOL
 # ==========================================
 UNSPLASH_POOL = {
     "wrangler": [
-        "1519245659620-e859806a8d3b", "1533473359331-0135ef1bcfb0", "1506015391300-4802dc74de2e",
-        "1568285201-168d6945821c", "1626243836043-34e85741f0b1", "1535446937720-e9cad5377719",
-        "1547449547-410a768f5611", "1592965427211-1e9671d18f5a", "1517544845501-bb7810f66d8e",
-        "1585848520031-72782e564d26", "1485463931481-863a35c6d36e", "1631553109355-1f8102d96924"
+        "1533473359331-0135ef1bcfb0", "1506015391300-4802dc74de2e", "1568285201-168d6945821c",
+        "1626243836043-34e85741f0b1", "1535446937720-e9cad5377719", "1585848520031-72782e564d26",
+        "1564500096238-76903f56d0d2", "1631553109355-1f8102d96924", "1547449547-410a768f5611",
+        "1615901323330-811c77f0438c", "1606820311337-3367f0b982f5", "1620300484797-2a45638a168b"
     ],
     "classic": [
         "1583262612502-869260a99672", "1552932906-e78964d4c207", "1603823483984-7a1926639d67",
-        "1519575706483-221027bfbb31", "1559868840-7988566904f4", "1574045330831-50e561a3575c"
+        "1519575706483-221027bfbb31", "1559868840-7988566904f4", "1574045330831-50e561a3575c",
+        "1589134142171-460b64d0840b", "1483982404394-0845a7206e12"
     ],
     "offroad": [
-        "1495819903669-078927b80d5b", "1469130198188-466c9869852f", "1492144534655-ae79c964c9d7",
-        "1500530855697-b586d89ba3ee", "1588632616462-974a3f123d46", "1446776811953-b23d57bd21aa",
-        "1464822759023-fed622ff2c3b", "1530232464733-1466048d0870"
-    ],
-    "parts": [
-        "1486262715619-0113e342bbef", "1487754180477-ea9d477cc6dc", "1498889444388-e67ea62c464b",
-        "1581093110294-8255953049b1", "1611649931327-0b1348821901"
+        "1495819903669-078927b80d5b", "1469130198188-466c9869852f", "1500530855697-b586d89ba3ee",
+        "1588632616462-974a3f123d46", "1446776811953-b23d57bd21aa", "1530232464733-1466048d0870",
+        "1517544845501-bb7810f66d8e", "1611186256221-f3b7d1591871"
     ],
     "generic": [
-        "1533473359331-0135ef1bcfb0", "1519245659620-e859806a8d3b", "1506015391300-4802dc74de2e",
-        "1580273916550-e323be2ae537", "1542362567-b2bb40a59565"
+        "1533473359331-0135ef1bcfb0", "1506015391300-4802dc74de2e", "1580273916550-e323be2ae537",
+        "1542362567-b2bb40a59565", "1631553109355-1f8102d96924", "1564500096238-76903f56d0d2"
     ]
 }
 
@@ -145,27 +140,15 @@ def clean_ai_content(text):
     text = text.replace("<h1>", "# ").replace("</h1>", "\n")
     text = text.replace("<h2>", "## ").replace("</h2>", "\n")
     text = text.replace("<h3>", "### ").replace("</h3>", "\n")
-    text = text.replace("<b>", "**").replace("</b>", "**")
-    text = text.replace("<p>", "").replace("</p>", "\n\n")
     return text.strip()
 
-# ==========================================
-# 🚀 INDEXING FUNCTIONS
-# ==========================================
 def submit_to_indexnow(url):
     try:
         endpoint = "https://api.indexnow.org/indexnow"
         host = WEBSITE_URL.replace("https://", "").replace("http://", "")
-        data = {
-            "host": host,
-            "key": INDEXNOW_KEY,
-            "keyLocation": f"https://{host}/{INDEXNOW_KEY}.txt",
-            "urlList": [url]
-        }
+        data = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"https://{host}/{INDEXNOW_KEY}.txt", "urlList": [url]}
         requests.post(endpoint, json=data, headers={'Content-Type': 'application/json; charset=utf-8'}, timeout=5)
-        print(f"      🚀 IndexNow Submitted")
-    except Exception as e:
-        print(f"      ⚠️ IndexNow Failed: {e}")
+    except: pass
 
 def submit_to_google(url):
     if not GOOGLE_JSON_KEY or not GOOGLE_LIBS_AVAILABLE: return
@@ -176,156 +159,119 @@ def submit_to_google(url):
         service = build("indexing", "v3", credentials=credentials)
         body = {"url": url, "type": "URL_UPDATED"}
         service.urlNotifications().publish(body=body).execute()
-        print(f"      🚀 Google Indexing Submitted")
-    except Exception as e:
-        print(f"      ⚠️ Google Indexing Error: {e}")
+    except: pass
 
 # ==========================================
-# 🎨 UNSPLASH ENGINE (PERFECTED + WATERMARK)
+# 🎨 UNSPLASH ENGINE (WATERMARK + ANTI-DUPLICATE)
 # ==========================================
 
 def modify_image_to_be_unique(img):
-    """Memodifikasi gambar dan menambahkan watermark @JeepDaily di pojok kanan atas."""
+    """Memodifikasi gambar dan menambahkan watermark kecil di area aman."""
     try:
-        # 1. Random Mirroring
+        # 1. Flip & Rotation (Digital Fingerprint Change)
         if random.random() > 0.5:
             img = ImageOps.mirror(img)
-        
-        # 2. Subtle Random Rotation
-        angle = random.uniform(-1.8, 1.8)
+        angle = random.uniform(-1.2, 1.2)
         img = img.rotate(angle, resample=Image.BICUBIC, expand=False)
         
-        # 3. Dynamic Random Crop & Zoom
+        # 2. Crop 16:9 Professional
         w, h = img.size
-        crop_factor = random.uniform(0.05, 0.09)
+        crop_factor = random.uniform(0.04, 0.07)
         left, top = w * crop_factor, h * crop_factor
         right, bottom = w * (1 - crop_factor), h * (1 - crop_factor)
         img = img.crop((left, top, right, bottom))
         img = img.resize((1200, 675), Image.Resampling.LANCZOS)
 
-        # 4. Color Enhancement
-        img = ImageEnhance.Color(img).enhance(random.uniform(0.95, 1.15))
-        img = ImageEnhance.Contrast(img).enhance(random.uniform(0.95, 1.10))
-        img = ImageEnhance.Brightness(img).enhance(random.uniform(0.98, 1.05))
-        
-        # 5. Professional Vignette
+        # 3. Cinematic Vignette
         vignette = Image.new('L', (1200, 675), 255)
         draw_v = ImageDraw.Draw(vignette)
         draw_v.ellipse((-150, -150, 1350, 825), fill=0)
         vignette = vignette.filter(ImageFilter.GaussianBlur(130))
         img = Image.composite(img, Image.new("RGB", (1200, 675), (10, 10, 10)), ImageOps.invert(vignette))
 
-        # 6. ✨ ADD WATERMARK (@JeepDaily) ✨
-        # Buat layer RGBA untuk teks transparan
+        # 4. ✨ WATERMARK @JeepDaily (UKURAN KECIL & AMAN) ✨
         txt_layer = Image.new('RGBA', (1200, 675), (255, 255, 255, 0))
         draw_txt = ImageDraw.Draw(txt_layer)
         
-        # Mencoba menggunakan font sistem, jika gagal pakai default
         try:
-            # Path font umum di Linux (GitHub Actions/Ubuntu)
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
+            # Menggunakan font ukuran 22 agar tidak mendominasi
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
         except:
             font = ImageFont.load_default()
         
         watermark_text = "@JeepDaily"
         
-        # Menghitung bounding box teks untuk penempatan presisi di pojok kanan atas
-        try:
-            bbox = draw_txt.textbbox((0, 0), watermark_text, font=font)
-            text_width = bbox[2] - bbox[0]
-            text_height = bbox[3] - bbox[1]
-        except:
-            text_width, text_height = 150, 25 # Fallback estimasi jika Pillow versi lama
-
-        # Posisi: Kanan atas dengan margin 25px
-        margin = 25
-        position = (1200 - text_width - margin, margin)
+        # Penempatan: Margin kanan 50px, atas 45px (Zona sangat aman)
+        # Estimasi lebar teks @JeepDaily dengan font bold ~140px
+        text_x = 1200 - 140 - 50 
+        text_y = 45
         
-        # Gambar teks putih dengan transparansi (Alpha 150)
-        draw_txt.text(position, watermark_text, fill=(255, 255, 255, 150), font=font)
+        draw_txt.text((text_x, text_y), watermark_text, fill=(255, 255, 255, 140), font=font)
         
-        # Gabungkan layer teks ke gambar utama
         img = img.convert('RGBA')
         img = Image.alpha_composite(img, txt_layer)
-        img = img.convert('RGB') # Kembalikan ke RGB untuk WEBP
+        img = img.convert('RGB')
         
         return img
-    except Exception as e:
-        print(f"      ⚠️ Watermark/Unique Error: {e}")
+    except:
         return img
 
 def generate_unsplash_image(keyword, filename):
+    global USED_IMAGE_IDS
     if not os.path.exists(IMAGE_DIR):
         os.makedirs(IMAGE_DIR, exist_ok=True)
 
     output_path = f"{IMAGE_DIR}/{filename}"
     keyword = keyword.lower()
     
-    selected_pool = UNSPLASH_POOL['generic'] 
-    if any(x in keyword for x in ['wrangler', 'rubicon', 'sahara']):
-        selected_pool = UNSPLASH_POOL['wrangler']
-    elif any(x in keyword for x in ['classic', 'willys', 'history', 'vintage']):
-        selected_pool = UNSPLASH_POOL['classic']
-    elif any(x in keyword for x in ['offroad', 'trail', 'mud', 'rock']):
-        selected_pool = UNSPLASH_POOL['offroad']
-    elif any(x in keyword for x in ['engine', 'repair', 'mod', 'parts']):
-        selected_pool = UNSPLASH_POOL['parts']
+    # Pool Selection
+    pool_key = 'generic'
+    if any(x in keyword for x in ['wrangler', 'rubicon', 'sahara']): pool_key = 'wrangler'
+    elif any(x in keyword for x in ['classic', 'willys', 'history', 'vintage']): pool_key = 'classic'
+    elif any(x in keyword for x in ['offroad', 'trail', 'mud', 'rock']): pool_key = 'offroad'
     
-    random.seed(time.time() + random.random())
+    selected_pool = UNSPLASH_POOL[pool_key]
+    
     attempts = 0
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 
-    while attempts < 3:
-        selected_id = random.choice(selected_pool)
+    while attempts < 4:
+        # Filter ID yang belum dipakai di run ini
+        available_ids = [i for i in selected_pool if i not in USED_IMAGE_IDS]
+        if not available_ids: available_ids = selected_pool # Reset jika sudah habis
+        
+        selected_id = random.choice(available_ids)
+        USED_IMAGE_IDS.add(selected_id)
+        
         sig = "".join(random.choices(string.digits, k=5))
         unsplash_url = f"https://images.unsplash.com/photo-{selected_id}?auto=format&fit=crop&w=1250&q=85&sig={sig}"
         
-        print(f"      🎨 Downloading & Watermarking Image: {selected_id} (Attempt {attempts+1})")
         try:
-            resp = requests.get(unsplash_url, headers=headers, timeout=20)
+            print(f"      🎨 Fetching Jeep Image: {selected_id}")
+            resp = requests.get(unsplash_url, headers=headers, timeout=25)
             if resp.status_code == 200:
                 img = Image.open(BytesIO(resp.content)).convert("RGB")
                 img = modify_image_to_be_unique(img)
                 img.save(output_path, "WEBP", quality=82, method=6)
                 
-                if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-                    print(f"      ✅ Watermarked Image Saved: {filename}")
+                # Verifikasi file tersimpan & valid (minimal 3KB)
+                if os.path.exists(output_path) and os.path.getsize(output_path) > 3072:
                     return f"/images/{filename}"
-        except Exception as e:
-            print(f"      ⚠️ Image Engine Error: {e}")
+        except: pass
             
         attempts += 1
         time.sleep(2)
 
-    print("      ❌ Image Download Failed. Using Fallback.")
     return FALLBACK_IMG_URL
 
 # ==========================================
-# 🧠 JEEP CONTENT ENGINE (AUTOMOTIVE EXPERT)
+# 🧠 JEEP CONTENT ENGINE (GROQ)
 # ==========================================
 
 def get_groq_article_json(title, summary, link, author_name):
     current_date = datetime.now().strftime("%Y-%m-%d")
-    
-    system_prompt = f"""
-    You are {author_name}, a passionate Automotive Expert specializing in the **Jeep** brand.
-    CURRENT DATE: {current_date}.
-    
-    OBJECTIVE: Write a high-quality, 1000-word article about Jeeps/Off-road.
-    
-    🛑 STRICT CONTENT RULES:
-    1. **MARKDOWN ONLY:** No HTML tags.
-    2. **TONE:** Enthusiastic, technical but accessible, and authoritative.
-    3. **ANTI-HOAX:** Be factual about engine specs (Pentastar V6, Hemi V8, 4xe), towing capacity, and model years.
-    4. **NO GENERIC HEADERS:**
-       - ❌ BAD: "Introduction", "Conclusion", "Features".
-       - ✅ GOOD: "Why the Rubicon Dominates the Rocks", "The Pentastar V6 Reliability Verdict".
-    
-    OUTPUT FORMAT:
-    JSON Object keys: "title", "description", "category", "main_keyword", "tags", "content_body".
-    """
-    
-    user_prompt = f"Topic: {title}\nSnippet: {summary}\nLink: {link}"
+    system_prompt = f"You are {author_name}, Jeep Expert. Write 1000 words in Markdown. Output JSON with: title, description, category, main_keyword, tags, content_body."
+    user_prompt = f"Topic: {title}\nSummary: {summary}\nLink: {link}"
     
     for api_key in GROQ_API_KEYS:
         client = Groq(api_key=api_key)
@@ -333,10 +279,7 @@ def get_groq_article_json(title, summary, link, author_name):
             print(f"      🤖 AI Writing ({author_name})...")
             completion = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
                 temperature=0.6,
                 max_tokens=8000,
                 response_format={"type": "json_object"}
@@ -366,42 +309,28 @@ def main():
             if processed >= TARGET_PER_SOURCE: break
             
             clean_title = entry.title.split(" - ")[0]
-            if "jeep" not in clean_title.lower() and "4x4" not in clean_title.lower() and "off-road" not in clean_title.lower() and "wrangler" not in clean_title.lower():
-               pass 
-
             slug = slugify(clean_title, max_length=50, word_boundary=True)
             filename = f"{slug}.md"
             
-            if os.path.exists(f"{CONTENT_DIR}/{filename}"): 
-                continue
+            if os.path.exists(f"{CONTENT_DIR}/{filename}"): continue
             
-            print(f"   ⚡ Processing: {clean_title[:40]}...")
-            
-            # 1. Content Generation
             author = random.choice(AUTHOR_PROFILES)
             raw_json = get_groq_article_json(clean_title, entry.summary, entry.link, author)
-            
             if not raw_json: continue
+            
             try:
                 data = json.loads(raw_json)
-            except:
-                print("      ❌ JSON Parse Error")
-                continue
-
-            # 2. Image Generation (WATERMARK ENGINE)
-            keyword = data.get('main_keyword') or clean_title
-            image_filename = f"{slug}.webp"
-            final_img = generate_unsplash_image(keyword, image_filename)
-            
-            # 3. Clean & Save
-            clean_body = clean_ai_content(data['content_body'])
-            links_md = get_internal_links_markdown()
-            final_body = clean_body + "\n\n### Explore More\n" + links_md
-            
-            cat = data.get('category', "Jeep History")
-            if cat not in VALID_CATEGORIES: cat = "Wrangler Life"
-            
-            md_content = f"""---
+                # Gambar relevan (Jeep Only) & Watermark aman
+                final_img = generate_unsplash_image(data.get('main_keyword', clean_title), f"{slug}.webp")
+                
+                clean_body = clean_ai_content(data['content_body'])
+                links_md = get_internal_links_markdown()
+                final_body = clean_body + "\n\n### Explore More\n" + links_md
+                
+                cat = data.get('category', "Jeep History")
+                if cat not in VALID_CATEGORIES: cat = "Wrangler Life"
+                
+                md_content = f"""---
 title: "{data['title'].replace('"', "'")}"
 date: {datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00")}
 author: "{author}"
@@ -420,19 +349,21 @@ weight: {random.randint(1, 10)}
 ---
 *Reference: Automotive analysis by {author} based on news from [{source_name}]({entry.link}).*
 """
-            with open(f"{CONTENT_DIR}/{filename}", "w", encoding="utf-8") as f:
-                f.write(md_content)
-            
-            save_link_to_memory(data['title'], slug)
-            
-            # 4. Submit Indexing
-            full_url = f"{WEBSITE_URL}/{slug}/"
-            submit_to_indexnow(full_url)
-            submit_to_google(full_url)
+                with open(f"{CONTENT_DIR}/{filename}", "w", encoding="utf-8") as f:
+                    f.write(md_content)
+                
+                save_link_to_memory(data['title'], slug)
+                
+                # Submit Indexing
+                full_url = f"{WEBSITE_URL}/{slug}/"
+                submit_to_indexnow(full_url)
+                submit_to_google(full_url)
 
-            print(f"      ✅ Published & Branded: {slug}")
-            processed += 1
-            time.sleep(5)
+                print(f"      ✅ Success: {slug}")
+                processed += 1
+                time.sleep(5)
+            except Exception as e:
+                print(f"      ❌ Error: {e}")
 
 if __name__ == "__main__":
     main()
