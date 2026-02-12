@@ -7,10 +7,11 @@ import re
 import random
 import warnings 
 import string
+import numpy as np
 from datetime import datetime
 from slugify import slugify
 from io import BytesIO
-from PIL import Image, ImageEnhance, ImageOps, ImageFilter
+from PIL import Image, ImageEnhance, ImageOps, ImageFilter, ImageDraw
 from groq import Groq, APIError, RateLimitError
 
 # --- SUPPRESS WARNINGS ---
@@ -76,31 +77,31 @@ MEMORY_FILE = f"{DATA_DIR}/link_memory.json"
 TARGET_PER_SOURCE = 1 
 
 # ==========================================
-# 📸 UNSPLASH POOL (JEEP SPECIFIC)
+# 📸 UNSPLASH POOL (JEEP SPECIFIC - ENHANCED)
 # ==========================================
 UNSPLASH_POOL = {
-    # Gambar Jeep Wrangler / Rubicon
     "wrangler": [
         "1519245659620-e859806a8d3b", "1533473359331-0135ef1bcfb0", "1506015391300-4802dc74de2e",
-        "1568285201-168d6945821c", "1626243836043-34e85741f0b1", "1535446937720-e9cad5377719"
+        "1568285201-168d6945821c", "1626243836043-34e85741f0b1", "1535446937720-e9cad5377719",
+        "1547449547-410a768f5611", "1592965427211-1e9671d18f5a", "1517544845501-bb7810f66d8e",
+        "1585848520031-72782e564d26", "1485463931481-863a35c6d36e", "1631553109355-1f8102d96924"
     ],
-    # Gambar Jeep Klasik / Willys
     "classic": [
         "1583262612502-869260a99672", "1552932906-e78964d4c207", "1603823483984-7a1926639d67",
-        "1519575706483-221027bfbb31"
+        "1519575706483-221027bfbb31", "1559868840-7988566904f4", "1574045330831-50e561a3575c"
     ],
-    # Gambar Offroad / Lumpur / Alam
     "offroad": [
         "1495819903669-078927b80d5b", "1469130198188-466c9869852f", "1492144534655-ae79c964c9d7",
-        "1500530855697-b586d89ba3ee", "1588632616462-974a3f123d46"
+        "1500530855697-b586d89ba3ee", "1588632616462-974a3f123d46", "1446776811953-b23d57bd21aa",
+        "1464822759023-fed622ff2c3b", "1530232464733-1466048d0870"
     ],
-    # Gambar Interior / Mesin / Bengkel
     "parts": [
-        "1486262715619-0113e342bbef", "1487754180477-ea9d477cc6dc", "1498889444388-e67ea62c464b"
+        "1486262715619-0113e342bbef", "1487754180477-ea9d477cc6dc", "1498889444388-e67ea62c464b",
+        "1581093110294-8255953049b1", "1611649931327-0b1348821901"
     ],
-    # Fallback Umum
     "generic": [
-        "1533473359331-0135ef1bcfb0", "1519245659620-e859806a8d3b", "1506015391300-4802dc74de2e"
+        "1533473359331-0135ef1bcfb0", "1519245659620-e859806a8d3b", "1506015391300-4802dc74de2e",
+        "1580273916550-e323be2ae537", "1542362567-b2bb40a59565"
     ]
 }
 
@@ -181,15 +182,29 @@ def submit_to_google(url):
         print(f"      ⚠️ Google Indexing Error: {e}")
 
 # ==========================================
-# 🎨 UNSPLASH ENGINE (JEEP VERSION)
+# 🎨 UNSPLASH ENGINE (PERFECTED UNIQUE VERSION)
 # ==========================================
+def add_noise(img):
+    """Menambahkan grain halus untuk mengubah hash gambar secara total."""
+    np_img = np.array(img).astype(np.float32)
+    noise = np.random.randn(*np_img.shape) * 2.5 # Level noise halus
+    np_img += noise
+    np_img = np.clip(np_img, 0, 255).astype(np.uint8)
+    return Image.fromarray(np_img)
+
 def modify_image_to_be_unique(img):
+    # 1. Random Mirroring
     if random.random() > 0.5:
         img = ImageOps.mirror(img)
     
-    # Random Crop Zoom (Agar beda hash)
+    # 2. Subtle Random Rotation (1 to 3 degrees) & Auto Crop
+    # Rotasi sedikit sangat efektif merubah sidik jari digital gambar
+    angle = random.uniform(-3, 3)
+    img = img.rotate(angle, resample=Image.BICUBIC, expand=False)
+    
+    # 3. Dynamic Random Crop Zoom
     w, h = img.size
-    crop_factor = random.uniform(0.05, 0.12)
+    crop_factor = random.uniform(0.06, 0.15)
     left = w * crop_factor
     top = h * crop_factor
     right = w * (1 - crop_factor)
@@ -197,19 +212,29 @@ def modify_image_to_be_unique(img):
     img = img.crop((left, top, right, bottom))
     img = img.resize((1200, 675), Image.Resampling.LANCZOS)
 
-    # Color Grading
-    enhancer = ImageEnhance.Color(img)
-    img = enhancer.enhance(random.uniform(0.9, 1.2)) 
-    enhancer_c = ImageEnhance.Contrast(img)
-    img = enhancer_c.enhance(random.uniform(0.95, 1.15))
+    # 4. Professional Color Grading
+    # Randomize brightness, contrast, and color balance
+    img = ImageEnhance.Color(img).enhance(random.uniform(0.85, 1.25))
+    img = ImageEnhance.Contrast(img).enhance(random.uniform(0.9, 1.15))
+    img = ImageEnhance.Brightness(img).enhance(random.uniform(0.95, 1.05))
     
-    # Vignette
-    vignette = Image.new('L', (1200, 675), 0)
-    from PIL import ImageDraw
+    # 5. Tinting / Temperature Shift (Warm or Cool)
+    if random.random() > 0.7:
+        # Subtle Warmth
+        r, g, b = img.split()
+        r = ImageEnhance.Brightness(r).enhance(1.05)
+        b = ImageEnhance.Brightness(b).enhance(0.95)
+        img = Image.merge("RGB", (r, g, b))
+    
+    # 6. Noise / Grain Injection (The Secret Sauce for Uniqueness)
+    img = add_noise(img)
+    
+    # 7. Cinematic Vignette (Improved)
+    vignette = Image.new('L', (1200, 675), 255)
     draw = ImageDraw.Draw(vignette)
-    draw.ellipse((30, 30, 1170, 645), fill=255)
-    vignette = vignette.filter(ImageFilter.GaussianBlur(100))
-    img = ImageOps.colorize(vignette, (15, 15, 15), (255, 255, 255))
+    draw.ellipse((-150, -150, 1350, 825), fill=0) # Oval besar
+    vignette = vignette.filter(ImageFilter.GaussianBlur(150))
+    img = Image.composite(img, Image.new("RGB", (1200, 675), (0,0,0)), ImageOps.invert(vignette))
     
     return img
 
@@ -217,33 +242,41 @@ def generate_unsplash_image(keyword, filename):
     output_path = f"{IMAGE_DIR}/{filename}"
     keyword = keyword.lower()
     
-    # Logic Pemilihan Gambar JEEP
+    # Selection logic based on Jeep subtypes
     selected_pool = UNSPLASH_POOL['generic'] 
     
-    if any(x in keyword for x in ['wrangler', 'rubicon', 'sahara', 'jk', 'jl']):
+    if any(x in keyword for x in ['wrangler', 'rubicon', 'sahara', 'jk', 'jl', '4xe']):
         selected_pool = UNSPLASH_POOL['wrangler']
-    elif any(x in keyword for x in ['classic', 'willys', 'cj', 'history', 'vintage']):
+    elif any(x in keyword for x in ['classic', 'willys', 'cj', 'history', 'vintage', 'old']):
         selected_pool = UNSPLASH_POOL['classic']
-    elif any(x in keyword for x in ['offroad', 'trail', 'mud', 'rock', 'adventure']):
+    elif any(x in keyword for x in ['offroad', 'trail', 'mud', 'rock', 'adventure', 'climb']):
         selected_pool = UNSPLASH_POOL['offroad']
-    elif any(x in keyword for x in ['engine', 'repair', 'mod', 'parts', 'interior']):
+    elif any(x in keyword for x in ['engine', 'repair', 'mod', 'parts', 'interior', 'wheel', 'tire']):
         selected_pool = UNSPLASH_POOL['parts']
     
     attempts = 0
-    while attempts < 5:
+    max_attempts = 5
+    # Gunakan seed unik berdasarkan filename agar hasil random tetap konsisten jika di-run ulang 
+    # tapi berbeda untuk setiap artikel
+    random.seed(filename) 
+    
+    while attempts < max_attempts:
         selected_id = random.choice(selected_pool)
-        unsplash_url = f"https://images.unsplash.com/photo-{selected_id}?auto=format&fit=crop&w=1200&q=80"
+        # Tambahkan parameter sig agar Unsplash tidak memberikan cache yang sama
+        unsplash_url = f"https://images.unsplash.com/photo-{selected_id}?auto=format&fit=crop&w=1300&q=90&sig={random.randint(1,1000)}"
         
-        print(f"      🎨 Downloading Jeep Image: {selected_id} (Attempt {attempts+1})")
+        print(f"      🎨 Fetching Unique Jeep Image: {selected_id}")
         try:
-            resp = requests.get(unsplash_url, timeout=15)
+            resp = requests.get(unsplash_url, timeout=20)
             if resp.status_code == 200:
                 img = Image.open(BytesIO(resp.content)).convert("RGB")
                 img = modify_image_to_be_unique(img)
-                img.save(output_path, "WEBP", quality=85)
-                print("      ✅ Image Saved & Unique!")
+                img.save(output_path, "WEBP", quality=82, method=6) # Method 6 = slower/better compression
+                print(f"      ✅ High-Quality Unique Image Saved: {filename}")
                 return f"/images/{filename}"
-        except: pass
+        except Exception as e:
+            print(f"      ⚠️ Image Error: {e}")
+        
         attempts += 1
         time.sleep(1)
 
@@ -328,11 +361,7 @@ def main():
             if processed >= TARGET_PER_SOURCE: break
             
             clean_title = entry.title.split(" - ")[0]
-            # Filter ekstra: Pastikan artikel ada hubungannya sama mobil/jeep
-            # (Mencegah berita nyasar dari Google News)
             if "jeep" not in clean_title.lower() and "4x4" not in clean_title.lower() and "off-road" not in clean_title.lower() and "wrangler" not in clean_title.lower():
-               # Kecuali kalau dari sumber spesifik, kita anggap aman.
-               # Tapi untuk hasil terbaik, kita skip yang tidak relevan.
                pass 
 
             slug = slugify(clean_title, max_length=60, word_boundary=True)
@@ -354,7 +383,7 @@ def main():
                 print("      ❌ JSON Parse Error")
                 continue
 
-            # 2. Image Generation (UNSPLASH JEEP POOL)
+            # 2. Image Generation (ENHANCED UNSPLASH ENGINE)
             keyword = data.get('main_keyword') or clean_title
             final_img = generate_unsplash_image(keyword, f"{slug}.webp")
             
