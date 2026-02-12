@@ -181,95 +181,117 @@ def submit_to_google(url):
         print(f"      ⚠️ Google Indexing Error: {e}")
 
 # ==========================================
-# 🎨 UNSPLASH ENGINE (PURE PILLOW UNIQUE)
+# 🎨 UNSPLASH ENGINE (PERFECTED UNIQUE VERSION)
 # ==========================================
 
 def modify_image_to_be_unique(img):
-    """Memodifikasi gambar menggunakan PIL murni tanpa library luar."""
-    
-    # 1. Random Mirroring
-    if random.random() > 0.5:
-        img = ImageOps.mirror(img)
-    
-    # 2. Subtle Random Rotation & Auto Crop
-    # Rotasi sangat kecil (0.5 - 2.0 derajat) merubah hash pixel secara masif
-    angle = random.uniform(-2, 2)
-    img = img.rotate(angle, resample=Image.BICUBIC, expand=False)
-    
-    # 3. Dynamic Random Crop Zoom (1200x675 Aspect Ratio)
-    w, h = img.size
-    crop_val = random.uniform(0.05, 0.10)
-    left = w * crop_val
-    top = h * crop_val
-    right = w * (1 - crop_val)
-    bottom = h * (1 - crop_val)
-    img = img.crop((left, top, right, bottom))
-    img = img.resize((1200, 675), Image.Resampling.LANCZOS)
+    """Memodifikasi gambar menggunakan Pillow agar unik secara visual dan digital (Hash)."""
+    try:
+        # 1. Random Mirroring
+        if random.random() > 0.5:
+            img = ImageOps.mirror(img)
+        
+        # 2. Subtle Random Rotation (-2 sampai 2 derajat)
+        # Ini sangat efektif merubah sidik jari digital gambar
+        angle = random.uniform(-2.0, 2.0)
+        img = img.rotate(angle, resample=Image.BICUBIC, expand=False)
+        
+        # 3. Dynamic Random Crop & Zoom (Fokus Tengah)
+        w, h = img.size
+        # Crop 5-10% dari pinggiran agar berbeda dari source asli
+        crop_factor = random.uniform(0.05, 0.10)
+        left = w * crop_factor
+        top = h * crop_factor
+        right = w * (1 - crop_factor)
+        bottom = h * (1 - crop_factor)
+        img = img.crop((left, top, right, bottom))
+        
+        # 4. Resize ke Standar 16:9 (Hero Image)
+        img = img.resize((1200, 675), Image.Resampling.LANCZOS)
 
-    # 4. Color Grading (Randomized)
-    img = ImageEnhance.Color(img).enhance(random.uniform(0.9, 1.2))
-    img = ImageEnhance.Contrast(img).enhance(random.uniform(0.95, 1.1))
-    img = ImageEnhance.Brightness(img).enhance(random.uniform(0.98, 1.05))
-    
-    # 5. Subtle Grain Effect (Menggunakan filter Sharpen halus sebagai pengganti noise)
-    if random.random() > 0.5:
-        img = img.filter(ImageFilter.SHARPEN)
-    
-    # 6. Professional Vignette
-    # Membuat gradient hitam di pinggiran untuk fokus ke tengah
-    vignette = Image.new('L', (1200, 675), 255)
-    draw = ImageDraw.Draw(vignette)
-    # Membuat oval besar
-    draw.ellipse((-100, -100, 1300, 775), fill=0)
-    vignette = vignette.filter(ImageFilter.GaussianBlur(120))
-    
-    # Gabungkan vignette ke gambar asli
-    black_bg = Image.new("RGB", (1200, 675), (5, 5, 5))
-    img = Image.composite(img, black_bg, ImageOps.invert(vignette))
-    
-    return img
+        # 5. Color Enhancement (Saturasi, Kontras, Brightness)
+        img = ImageEnhance.Color(img).enhance(random.uniform(0.95, 1.15))
+        img = ImageEnhance.Contrast(img).enhance(random.uniform(0.95, 1.10))
+        img = ImageEnhance.Brightness(img).enhance(random.uniform(0.98, 1.05))
+        
+        # 6. Subtle Sharpening (Menambah kualitas visual)
+        if random.random() > 0.5:
+            img = img.filter(ImageFilter.SHARPEN)
+        
+        # 7. Cinematic Vignette (Shadow di pinggiran)
+        vignette = Image.new('L', (1200, 675), 255)
+        draw = ImageDraw.Draw(vignette)
+        # Membuat oval gradient
+        draw.ellipse((-150, -150, 1350, 825), fill=0)
+        vignette = vignette.filter(ImageFilter.GaussianBlur(130))
+        
+        # Menggabungkan vignette hitam halus ke gambar
+        black_bg = Image.new("RGB", (1200, 675), (15, 15, 15))
+        img = Image.composite(img, black_bg, ImageOps.invert(vignette))
+        
+        return img
+    except:
+        return img # Jika proses fail, return original hasil download
 
 def generate_unsplash_image(keyword, filename):
+    # Buat folder jika belum ada
+    if not os.path.exists(IMAGE_DIR):
+        os.makedirs(IMAGE_DIR, exist_ok=True)
+
     output_path = f"{IMAGE_DIR}/{filename}"
     keyword = keyword.lower()
     
-    # Logika pemilihan kategori gambar berdasarkan keyword
+    # Logika pemilihan pool gambar
     selected_pool = UNSPLASH_POOL['generic'] 
-    
-    if any(x in keyword for x in ['wrangler', 'rubicon', 'sahara', 'jk', 'jl', '4xe']):
+    if any(x in keyword for x in ['wrangler', 'rubicon', 'sahara', 'jk', 'jl']):
         selected_pool = UNSPLASH_POOL['wrangler']
     elif any(x in keyword for x in ['classic', 'willys', 'cj', 'history', 'vintage']):
         selected_pool = UNSPLASH_POOL['classic']
     elif any(x in keyword for x in ['offroad', 'trail', 'mud', 'rock', 'adventure']):
         selected_pool = UNSPLASH_POOL['offroad']
-    elif any(x in keyword for x in ['engine', 'repair', 'mod', 'parts', 'interior', 'wheel']):
+    elif any(x in keyword for x in ['engine', 'repair', 'mod', 'parts', 'interior']):
         selected_pool = UNSPLASH_POOL['parts']
     
-    # Tambahkan elemen random pada seed agar hasil berbeda tiap pemanggilan
+    # Reset seed untuk variasi setiap pemanggilan
     random.seed(time.time() + random.random())
     
     attempts = 0
-    while attempts < 5:
+    # User agent agar tidak diblokir Unsplash
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+
+    while attempts < 3:
         selected_id = random.choice(selected_pool)
-        # Menambahkan parameter unik pada URL agar tidak terkena cache CDN
-        cache_buster = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
-        unsplash_url = f"https://images.unsplash.com/photo-{selected_id}?auto=format&fit=crop&w=1250&q=85&cb={cache_buster}"
+        # Menambahkan parameter 'sig' unik agar Unsplash tidak memberikan cache yang sama
+        sig = "".join(random.choices(string.digits, k=5))
+        unsplash_url = f"https://images.unsplash.com/photo-{selected_id}?auto=format&fit=crop&w=1250&q=85&sig={sig}"
         
-        print(f"      🎨 Downloading Jeep Image: {selected_id}")
+        print(f"      🎨 Downloading Jeep Image: {selected_id} (Attempt {attempts+1})")
         try:
-            resp = requests.get(unsplash_url, timeout=15)
+            resp = requests.get(unsplash_url, headers=headers, timeout=20)
             if resp.status_code == 200:
-                img = Image.open(BytesIO(resp.content)).convert("RGB")
+                img_data = BytesIO(resp.content)
+                img = Image.open(img_data).convert("RGB")
+                
+                # Modifikasi agar Unik
                 img = modify_image_to_be_unique(img)
-                img.save(output_path, "WEBP", quality=85, method=6)
-                print(f"      ✅ Unique Image Saved: {filename}")
-                return f"/images/{filename}"
+                
+                # Simpan sebagai WEBP (Lebih ringan & SEO Friendly)
+                img.save(output_path, "WEBP", quality=82, method=6)
+                
+                # VERIFIKASI: Pastikan file benar-benar ada dan tidak berukuran 0
+                if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+                    print(f"      ✅ Unique Image Saved: {filename}")
+                    return f"/images/{filename}"
+                else:
+                    print("      ⚠️ File saved but invalid size. Retrying...")
         except Exception as e:
             print(f"      ⚠️ Image Engine Error: {e}")
             
         attempts += 1
-        time.sleep(1)
+        time.sleep(2) # Jeda sebelum coba lagi
 
+    # Jika semua percobaan gagal, gunakan Fallback URL (Gambar Unsplash Direct)
+    print("      ❌ Image Download Failed after 3 attempts. Using Fallback.")
     return FALLBACK_IMG_URL
 
 # ==========================================
@@ -354,7 +376,8 @@ def main():
             if "jeep" not in clean_title.lower() and "4x4" not in clean_title.lower() and "off-road" not in clean_title.lower() and "wrangler" not in clean_title.lower():
                pass 
 
-            slug = slugify(clean_title, max_length=60, word_boundary=True)
+            # Gunakan slug yang sedikit lebih pendek agar path tidak terlalu panjang (Windows/Linux limit)
+            slug = slugify(clean_title, max_length=50, word_boundary=True)
             filename = f"{slug}.md"
             
             if os.path.exists(f"{CONTENT_DIR}/{filename}"): 
@@ -373,9 +396,11 @@ def main():
                 print("      ❌ JSON Parse Error")
                 continue
 
-            # 2. Image Generation (PURE PILLOW ENGINE)
+            # 2. Image Generation (PERFECTED ENGINE)
             keyword = data.get('main_keyword') or clean_title
-            final_img = generate_unsplash_image(keyword, f"{slug}.webp")
+            # Pastikan nama file gambar aman
+            image_filename = f"{slug}.webp"
+            final_img = generate_unsplash_image(keyword, image_filename)
             
             # 3. Clean & Save
             clean_body = clean_ai_content(data['content_body'])
@@ -412,7 +437,7 @@ weight: {random.randint(1, 10)}
             save_link_to_memory(data['title'], slug)
             
             # 4. Submit Indexing
-            full_url = f"{WEBSITE_URL}/articles/{slug}/"
+            full_url = f"{WEBSITE_URL}/{slug}/"
             submit_to_indexnow(full_url)
             submit_to_google(full_url)
 
