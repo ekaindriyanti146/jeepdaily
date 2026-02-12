@@ -18,6 +18,7 @@ outputs:
     - Sitemap
   page:
     - HTML
+    - Sitemap
   section:
     - HTML
     - RSS
