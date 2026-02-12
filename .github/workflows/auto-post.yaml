@@ -34,7 +34,7 @@ jobs:
 
       - name: Commit and Push
         run: |
-          git config --global user.name "SportBot"
+          git config --global user.name "JeepDaily"
           git config --global user.email "bot@Jeepdaily.com"
           
           git add .
@@ -46,7 +46,7 @@ jobs:
             echo "Changes detected. Committing..."
             # [skip ci] ditambahkan agar GitHub Actions tidak looping, 
             # TAPI Netlify biasanya tetap akan mendeteksi ini dan melakukan deploy.
-            git commit -m "⚽ New Sport Update [skip ci]"
+            git commit -m "⚽ New Jeep Update"
             
             # Pull dulu barangkali ada update manual dari Anda agar tidak crash
             git pull --rebase origin main
