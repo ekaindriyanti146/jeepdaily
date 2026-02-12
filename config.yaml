@@ -21,8 +21,7 @@ outputs:
     - Sitemap
   section:
     - HTML
-    - RSS
-    - Sitemap
+    - RSS 
   taxonomy:
     - HTML
     - RSS
