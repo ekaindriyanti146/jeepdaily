@@ -10,7 +10,7 @@ import string
 from datetime import datetime
 from slugify import slugify
 from io import BytesIO
-from PIL import Image, ImageEnhance, ImageOps, ImageFilter, ImageDraw
+from PIL import Image, ImageEnhance, ImageOps, ImageFilter, ImageDraw, ImageFont
 from groq import Groq, APIError, RateLimitError
 
 # --- SUPPRESS WARNINGS ---
@@ -181,117 +181,123 @@ def submit_to_google(url):
         print(f"      ⚠️ Google Indexing Error: {e}")
 
 # ==========================================
-# 🎨 UNSPLASH ENGINE (PERFECTED UNIQUE VERSION)
+# 🎨 UNSPLASH ENGINE (PERFECTED + WATERMARK)
 # ==========================================
 
 def modify_image_to_be_unique(img):
-    """Memodifikasi gambar menggunakan Pillow agar unik secara visual dan digital (Hash)."""
+    """Memodifikasi gambar dan menambahkan watermark @JeepDaily di pojok kanan atas."""
     try:
         # 1. Random Mirroring
         if random.random() > 0.5:
             img = ImageOps.mirror(img)
         
-        # 2. Subtle Random Rotation (-2 sampai 2 derajat)
-        # Ini sangat efektif merubah sidik jari digital gambar
-        angle = random.uniform(-2.0, 2.0)
+        # 2. Subtle Random Rotation
+        angle = random.uniform(-1.8, 1.8)
         img = img.rotate(angle, resample=Image.BICUBIC, expand=False)
         
-        # 3. Dynamic Random Crop & Zoom (Fokus Tengah)
+        # 3. Dynamic Random Crop & Zoom
         w, h = img.size
-        # Crop 5-10% dari pinggiran agar berbeda dari source asli
-        crop_factor = random.uniform(0.05, 0.10)
-        left = w * crop_factor
-        top = h * crop_factor
-        right = w * (1 - crop_factor)
-        bottom = h * (1 - crop_factor)
+        crop_factor = random.uniform(0.05, 0.09)
+        left, top = w * crop_factor, h * crop_factor
+        right, bottom = w * (1 - crop_factor), h * (1 - crop_factor)
         img = img.crop((left, top, right, bottom))
-        
-        # 4. Resize ke Standar 16:9 (Hero Image)
         img = img.resize((1200, 675), Image.Resampling.LANCZOS)
 
-        # 5. Color Enhancement (Saturasi, Kontras, Brightness)
+        # 4. Color Enhancement
         img = ImageEnhance.Color(img).enhance(random.uniform(0.95, 1.15))
         img = ImageEnhance.Contrast(img).enhance(random.uniform(0.95, 1.10))
         img = ImageEnhance.Brightness(img).enhance(random.uniform(0.98, 1.05))
         
-        # 6. Subtle Sharpening (Menambah kualitas visual)
-        if random.random() > 0.5:
-            img = img.filter(ImageFilter.SHARPEN)
-        
-        # 7. Cinematic Vignette (Shadow di pinggiran)
+        # 5. Professional Vignette
         vignette = Image.new('L', (1200, 675), 255)
-        draw = ImageDraw.Draw(vignette)
-        # Membuat oval gradient
-        draw.ellipse((-150, -150, 1350, 825), fill=0)
+        draw_v = ImageDraw.Draw(vignette)
+        draw_v.ellipse((-150, -150, 1350, 825), fill=0)
         vignette = vignette.filter(ImageFilter.GaussianBlur(130))
+        img = Image.composite(img, Image.new("RGB", (1200, 675), (10, 10, 10)), ImageOps.invert(vignette))
+
+        # 6. ✨ ADD WATERMARK (@JeepDaily) ✨
+        # Buat layer RGBA untuk teks transparan
+        txt_layer = Image.new('RGBA', (1200, 675), (255, 255, 255, 0))
+        draw_txt = ImageDraw.Draw(txt_layer)
         
-        # Menggabungkan vignette hitam halus ke gambar
-        black_bg = Image.new("RGB", (1200, 675), (15, 15, 15))
-        img = Image.composite(img, black_bg, ImageOps.invert(vignette))
+        # Mencoba menggunakan font sistem, jika gagal pakai default
+        try:
+            # Path font umum di Linux (GitHub Actions/Ubuntu)
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
+        except:
+            font = ImageFont.load_default()
+        
+        watermark_text = "@JeepDaily"
+        
+        # Menghitung bounding box teks untuk penempatan presisi di pojok kanan atas
+        try:
+            bbox = draw_txt.textbbox((0, 0), watermark_text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+        except:
+            text_width, text_height = 150, 25 # Fallback estimasi jika Pillow versi lama
+
+        # Posisi: Kanan atas dengan margin 25px
+        margin = 25
+        position = (1200 - text_width - margin, margin)
+        
+        # Gambar teks putih dengan transparansi (Alpha 150)
+        draw_txt.text(position, watermark_text, fill=(255, 255, 255, 150), font=font)
+        
+        # Gabungkan layer teks ke gambar utama
+        img = img.convert('RGBA')
+        img = Image.alpha_composite(img, txt_layer)
+        img = img.convert('RGB') # Kembalikan ke RGB untuk WEBP
         
         return img
-    except:
-        return img # Jika proses fail, return original hasil download
+    except Exception as e:
+        print(f"      ⚠️ Watermark/Unique Error: {e}")
+        return img
 
 def generate_unsplash_image(keyword, filename):
-    # Buat folder jika belum ada
     if not os.path.exists(IMAGE_DIR):
         os.makedirs(IMAGE_DIR, exist_ok=True)
 
     output_path = f"{IMAGE_DIR}/{filename}"
     keyword = keyword.lower()
     
-    # Logika pemilihan pool gambar
     selected_pool = UNSPLASH_POOL['generic'] 
-    if any(x in keyword for x in ['wrangler', 'rubicon', 'sahara', 'jk', 'jl']):
+    if any(x in keyword for x in ['wrangler', 'rubicon', 'sahara']):
         selected_pool = UNSPLASH_POOL['wrangler']
-    elif any(x in keyword for x in ['classic', 'willys', 'cj', 'history', 'vintage']):
+    elif any(x in keyword for x in ['classic', 'willys', 'history', 'vintage']):
         selected_pool = UNSPLASH_POOL['classic']
-    elif any(x in keyword for x in ['offroad', 'trail', 'mud', 'rock', 'adventure']):
+    elif any(x in keyword for x in ['offroad', 'trail', 'mud', 'rock']):
         selected_pool = UNSPLASH_POOL['offroad']
-    elif any(x in keyword for x in ['engine', 'repair', 'mod', 'parts', 'interior']):
+    elif any(x in keyword for x in ['engine', 'repair', 'mod', 'parts']):
         selected_pool = UNSPLASH_POOL['parts']
     
-    # Reset seed untuk variasi setiap pemanggilan
     random.seed(time.time() + random.random())
-    
     attempts = 0
-    # User agent agar tidak diblokir Unsplash
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
     while attempts < 3:
         selected_id = random.choice(selected_pool)
-        # Menambahkan parameter 'sig' unik agar Unsplash tidak memberikan cache yang sama
         sig = "".join(random.choices(string.digits, k=5))
         unsplash_url = f"https://images.unsplash.com/photo-{selected_id}?auto=format&fit=crop&w=1250&q=85&sig={sig}"
         
-        print(f"      🎨 Downloading Jeep Image: {selected_id} (Attempt {attempts+1})")
+        print(f"      🎨 Downloading & Watermarking Image: {selected_id} (Attempt {attempts+1})")
         try:
             resp = requests.get(unsplash_url, headers=headers, timeout=20)
             if resp.status_code == 200:
-                img_data = BytesIO(resp.content)
-                img = Image.open(img_data).convert("RGB")
-                
-                # Modifikasi agar Unik
+                img = Image.open(BytesIO(resp.content)).convert("RGB")
                 img = modify_image_to_be_unique(img)
-                
-                # Simpan sebagai WEBP (Lebih ringan & SEO Friendly)
                 img.save(output_path, "WEBP", quality=82, method=6)
                 
-                # VERIFIKASI: Pastikan file benar-benar ada dan tidak berukuran 0
                 if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-                    print(f"      ✅ Unique Image Saved: {filename}")
+                    print(f"      ✅ Watermarked Image Saved: {filename}")
                     return f"/images/{filename}"
-                else:
-                    print("      ⚠️ File saved but invalid size. Retrying...")
         except Exception as e:
             print(f"      ⚠️ Image Engine Error: {e}")
             
         attempts += 1
-        time.sleep(2) # Jeda sebelum coba lagi
+        time.sleep(2)
 
-    # Jika semua percobaan gagal, gunakan Fallback URL (Gambar Unsplash Direct)
-    print("      ❌ Image Download Failed after 3 attempts. Using Fallback.")
+    print("      ❌ Image Download Failed. Using Fallback.")
     return FALLBACK_IMG_URL
 
 # ==========================================
@@ -315,24 +321,11 @@ def get_groq_article_json(title, summary, link, author_name):
        - ❌ BAD: "Introduction", "Conclusion", "Features".
        - ✅ GOOD: "Why the Rubicon Dominates the Rocks", "The Pentastar V6 Reliability Verdict".
     
-    STRUCTURE ADVICE:
-    - **History/Context:** Mention model codes (CJ, YJ, TJ, JK, JL, JT) where relevant.
-    - **Specs Table:** Use Markdown Table for HP, Torque, Ground Clearance if reviewing a car.
-    - **Pros & Cons:** If it's a review.
-    - **The Verdict:** Is it worth the money?
-
     OUTPUT FORMAT:
     JSON Object keys: "title", "description", "category", "main_keyword", "tags", "content_body".
     """
     
-    user_prompt = f"""
-    SOURCE INFO:
-    - Topic: {title}
-    - Snippet: {summary}
-    - Link: {link}
-    
-    TASK: Write the article now using MARKDOWN. Focus on Jeep details.
-    """
+    user_prompt = f"Topic: {title}\nSnippet: {summary}\nLink: {link}"
     
     for api_key in GROQ_API_KEYS:
         client = Groq(api_key=api_key)
@@ -361,7 +354,7 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print("🔥 JEEP MICRO NICHE ENGINE STARTED 🔥")
+    print("🔥 JEEP BRANDED ENGINE STARTED 🔥")
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Reading: {source_name}")
@@ -376,7 +369,6 @@ def main():
             if "jeep" not in clean_title.lower() and "4x4" not in clean_title.lower() and "off-road" not in clean_title.lower() and "wrangler" not in clean_title.lower():
                pass 
 
-            # Gunakan slug yang sedikit lebih pendek agar path tidak terlalu panjang (Windows/Linux limit)
             slug = slugify(clean_title, max_length=50, word_boundary=True)
             filename = f"{slug}.md"
             
@@ -396,9 +388,8 @@ def main():
                 print("      ❌ JSON Parse Error")
                 continue
 
-            # 2. Image Generation (PERFECTED ENGINE)
+            # 2. Image Generation (WATERMARK ENGINE)
             keyword = data.get('main_keyword') or clean_title
-            # Pastikan nama file gambar aman
             image_filename = f"{slug}.webp"
             final_img = generate_unsplash_image(keyword, image_filename)
             
@@ -407,10 +398,8 @@ def main():
             links_md = get_internal_links_markdown()
             final_body = clean_body + "\n\n### Explore More\n" + links_md
             
-            # Fallback Category Logic
             cat = data.get('category', "Jeep History")
-            if cat not in VALID_CATEGORIES:
-                cat = "Wrangler Life" # Default category
+            if cat not in VALID_CATEGORIES: cat = "Wrangler Life"
             
             md_content = f"""---
 title: "{data['title'].replace('"', "'")}"
@@ -441,7 +430,7 @@ weight: {random.randint(1, 10)}
             submit_to_indexnow(full_url)
             submit_to_google(full_url)
 
-            print(f"      ✅ Published: {slug}")
+            print(f"      ✅ Published & Branded: {slug}")
             processed += 1
             time.sleep(5)
 
