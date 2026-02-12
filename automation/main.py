@@ -26,7 +26,7 @@ def log_event(msg):
 # ==========================================
 GROK_KEYS_RAW = os.environ.get("GROK_SSO_TOKENS", "") 
 GROK_SSO_TOKENS = [k.strip() for k in GROK_KEYS_RAW.split(",") if k.strip()]
-GROK_COOKIES = os.environ.get("GROK_COOKIES", "") 
+GROK_COOKIES = os.environ.get("GROK_COOKIES", "") # AMBIL COOKIE UTUH DARI BROWSER
 
 WEBSITE_URL = "https://dother.biz.id" 
 INDEXNOW_KEY = "e74819b68a0f40e98f6ec3dc24f610f0" 
@@ -41,7 +41,7 @@ RSS_SOURCES = {
 }
 
 # ==========================================
-# 🔄 GROK ENGINE (FIXED IMPERSONATION)
+# 🔄 GROK ENGINE (ULTRA STEALTH)
 # ==========================================
 class GrokEngine:
     def __init__(self, tokens):
@@ -59,29 +59,34 @@ class GrokEngine:
         if not token: return None
         
         url = "https://grok.com/api/rpc/chat/completion"
-        statsig_id = str(uuid.uuid4())
         
-        # Headers tetap menggunakan string 133, tapi TLS pakai 110 agar tidak error library
+        # Headers mengikuti struktur backend yang Anda kirim (Stealth Mode)
         headers = {
             "Authorization": f"Bearer {token}",
             "Cookie": GROK_COOKIES,
             "x-sso-token": token,
-            "x-statsig-id": statsig_id,
+            "x-statsig-id": str(uuid.uuid4()), # Unik sesuai file config.py
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Origin": "https://grok.com",
             "Referer": "https://grok.com/",
             "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
         }
         
         payload = {
             "modelName": "grok-latest",
             "message": prompt,
+            "fileAttachments": [],
             "intent": "IMAGE_GEN" if is_image else "UNKNOWN"
         }
 
         try:
-            # MENGGUNAKAN chrome110 (Paling stabil di library curl_cffi)
+            # Menggunakan impersonate chrome110 (Paling stabil untuk menembus 403)
             response = requests.post(
                 url, 
                 headers=headers, 
@@ -91,7 +96,7 @@ class GrokEngine:
             )
             
             if response.status_code != 200:
-                log_event(f"      ❌ [BLOKIR] Status {response.status_code}. Cloudflare mengenali bot atau Cookie salah.")
+                log_event(f"      ❌ [API LOG] Status {response.status_code}. Cloudflare/Grok memblokir request.")
                 return None
 
             full_text = ""
@@ -111,26 +116,26 @@ class GrokEngine:
                 
             return {"text": full_text, "image_url": image_url}
         except Exception as e:
-            log_event(f"      ❌ [ERROR KONEKSI] {e}")
+            log_event(f"      ❌ [API LOG] Error Koneksi: {e}")
             return None
 
 grok = GrokEngine(GROK_SSO_TOKENS)
 
 # ==========================================
-# 🚀 SUBMIT INDEXING (LOG MUNCUL SETELAH FILE JADI)
+# 🚀 SUBMIT INDEXING (LOG WAJIB MUNCUL SETELAH FILE JADI)
 # ==========================================
 def submit_indexing(slug):
     full_url = f"{WEBSITE_URL}/{slug}/"
-    log_event(f"      📡 [INDEXING] Memulai proses submit untuk: {full_url}")
+    log_event(f"      📡 [INDEXING] Memproses submit untuk: {full_url}")
     
-    # 1. Bing (IndexNow)
+    # 1. IndexNow (Bing/Yandex)
     try:
         host = "dother.biz.id"
         data = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"https://{host}/{INDEXNOW_KEY}.txt", "urlList": [full_url]}
-        r = requests.post("https://api.indexnow.org/indexnow", json=data, timeout=10, impersonate="chrome110")
-        log_event(f"      🚀 [INDEX LOG] IndexNow Status: {r.status_code} (Berhasil)")
+        r = requests.post("https://api.indexnow.org/indexnow", json=data, timeout=10)
+        log_event(f"      🚀 [INDEX LOG] IndexNow Status: {r.status_code} (Success)")
     except Exception as e:
-        log_event(f"      ❌ [INDEX LOG] IndexNow Gagal: {e}")
+        log_event(f"      ❌ [INDEX LOG] IndexNow Failed: {e}")
 
     # 2. Google Indexing API
     if GOOGLE_JSON_KEY:
@@ -140,9 +145,9 @@ def submit_indexing(slug):
             creds = ServiceAccountCredentials.from_json_keyfile_dict(json.loads(GOOGLE_JSON_KEY), ["https://www.googleapis.com/auth/indexing"])
             service = build("indexing", "v3", credentials=creds)
             service.urlNotifications().publish(body={"url": full_url, "type": "URL_UPDATED"}).execute()
-            log_event(f"      🚀 [INDEX LOG] Google Index: Sukses Terkirim.")
+            log_event(f"      🚀 [INDEX LOG] Google Index: Berhasil Terkirim.")
         except Exception as e:
-            log_event(f"      ❌ [INDEX LOG] Google Error: {e}")
+            log_event(f"      ❌ [INDEX LOG] Google Index Failed: {e}")
 
 # ==========================================
 # 🏁 MAIN WORKFLOW
@@ -164,19 +169,19 @@ def main():
             file_path = f"{CONTENT_DIR}/{slug}.md"
 
             if os.path.exists(file_path):
-                log_event(f"      ⏭️ [SKIP] Judul sudah ada: {slug}")
+                log_event(f"      ⏭️ [SKIP] Sudah ada: {slug}")
                 continue
 
             # 1. GENERATE ARTIKEL
-            log_event(f"      📝 [CONTENT] Menulis: {clean_title}")
+            log_event(f"      📝 [CONTENT] Sedang menulis: {clean_title}")
             res = grok.call_rpc(f"Write a 1000-word SEO article in JSON format about: {clean_title}. Keys: seo_title, content_markdown, image_prompt.")
             
             if not res or not res.get('text'):
-                log_event("      ❌ [STOP] Gagal tembus Cloudflare (403). Log Indexing tidak dipanggil.")
+                log_event("      ❌ [STOP] Gagal tembus Cloudflare (403). Log Indexing tidak dipanggil karena artikel tidak jadi.")
                 continue
 
             try:
-                # Ambil JSON
+                # Parsing JSON
                 data = json.loads(re.search(r'(\{.*\})', res['text'], re.DOTALL).group(1))
                 
                 # 2. GENERATE GAMBAR
@@ -185,8 +190,8 @@ def main():
                 img_path = ""
                 if img_res and img_res.get('image_url'):
                     try:
-                        img_resp = requests.get(img_res['image_url'], impersonate="chrome110")
-                        img = Image.open(BytesIO(img_resp.content)).convert("RGB")
+                        img_data = requests.get(img_res['image_url']).content
+                        img = Image.open(BytesIO(img_data)).convert("RGB")
                         draw = ImageDraw.Draw(img)
                         draw.text((20, 20), "@JeepDaily", fill=(255, 255, 255))
                         img.save(f"{IMAGE_DIR}/{slug}.webp", "WEBP")
@@ -194,17 +199,17 @@ def main():
                         log_event("      ✅ [IMAGE LOG] Gambar disimpan.")
                     except: log_event("      ❌ [IMAGE LOG] Simpan gambar gagal.")
 
-                # 3. SIMPAN FILE (HANYA JIKA GROK BERHASIL)
-                md_body = f"---\ntitle: \"{data.get('seo_title', clean_title)}\"\ndate: {datetime.now().isoformat()}\nfeatured_image: \"{img_path}\"\nslug: \"{slug}\"\nurl: \"/{slug}/\"\n---\n{data.get('content_markdown', '')}"
+                # 3. SIMPAN FILE (Konten Berhasil Terbuat)
+                md_body = f"---\ntitle: \"{data.get('seo_title', clean_title)}\"\ndate: {datetime.now().isoformat()}\nfeatured_image: \"{img_path}\"\nslug: \"{slug}\"\nurl: \"/{slug}/\"\n---\n{data.get('content_markdown', 'Error')}"
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(md_body)
                 
-                # 4. SUBMIT INDEXING (LOG MUNCUL DISINI)
+                # 4. SUBMIT INDEXING (LOG MUNCUL DI SINI)
                 submit_indexing(slug)
                 log_event(f"      ✅ [SUCCESS] ARTIKEL SELESAI: {slug}")
 
             except Exception as e:
-                log_event(f"      ❌ [ERROR] Gagal memproses JSON Grok: {e}")
+                log_event(f"      ❌ [ERROR] Gagal memproses data JSON Grok: {e}")
 
             time.sleep(10)
 
