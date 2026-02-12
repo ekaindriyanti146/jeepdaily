@@ -25,7 +25,7 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install playwright playwright-stealth feedparser python-slugify pillow oauth2client google-api-python-client requests pytz
-          playwright install chromium
+          
       - name: Run Content Engine
         env:
           # Pastikan Nama Secret di GitHub adalah GROK_SSO_TOKENS
