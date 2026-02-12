@@ -6,3 +6,4 @@ pytz
 python-slugify
 google-api-python-client
 oauth2client
+curl_cffi
