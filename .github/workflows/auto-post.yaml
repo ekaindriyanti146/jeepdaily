@@ -30,6 +30,7 @@ jobs:
         env:
           # Pastikan Nama Secret di GitHub adalah GROK_SSO_TOKENS
           GROK_SSO_TOKENS: ${{ secrets.GROK_SSO_TOKENS }}
+          GROK_COOKIES: ${{ secrets.GROK_COOKIES }}
           GOOGLE_INDEXING_KEY: ${{ secrets.GOOGLE_INDEXING_KEY }} 
           INDEXNOW_KEY: "e74819b68a0f40e98f6ec3dc24f610f0"
         run: python automation/main.py
