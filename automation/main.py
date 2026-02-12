@@ -27,6 +27,7 @@ except ImportError:
 # ⚙️ CONFIGURATION & ENV VARIABLES
 # ==========================================
 
+# Ambil token dari GitHub Secrets (format: token1,token2)
 GROK_KEYS_RAW = os.environ.get("GROK_SSO_TOKENS", "") 
 GROK_SSO_TOKENS = [k.strip() for k in GROK_KEYS_RAW.split(",") if k.strip()]
 
@@ -39,6 +40,7 @@ IMAGE_DIR = "static/images"
 DATA_DIR = "automation/data"
 MEMORY_FILE = f"{DATA_DIR}/link_memory.json"
 
+# Niche RSS Sources
 RSS_SOURCES = {
     "Wrangler Life": "https://news.google.com/rss/search?q=Jeep+Wrangler+Review+News&hl=en-US&gl=US&ceid=US:en",
     "Off-road Tips": "https://news.google.com/rss/search?q=Offroad+4x4+Adventure+Tips&hl=en-US&gl=US&ceid=US:en",
@@ -81,6 +83,7 @@ class GrokEngine:
         }
 
         try:
+            # Stream=True karena Grok menggunakan SSE (Server Side Events)
             response = requests.post(url, headers=headers, json=payload, stream=True, timeout=180)
             full_text = ""
             image_url = ""
@@ -88,8 +91,11 @@ class GrokEngine:
             for line in response.iter_lines():
                 if not line: continue
                 line_text = line.decode('utf-8')
+                
+                # Buang prefix 'data: ' jika ada
                 if line_text.startswith("data: "):
                     line_text = line_text[6:]
+                
                 try:
                     chunk = json.loads(line_text)
                     res = chunk.get("result", {}).get("response", {})
@@ -113,7 +119,9 @@ grok = GrokEngine(GROK_SSO_TOKENS)
 # ==========================================
 
 def extract_json_from_text(text):
+    """Mengekstrak JSON dari teks menggunakan Regex agar lebih kuat"""
     try:
+        # Cari pola { ... } yang paling luar
         match = re.search(r'(\{.*\})', text, re.DOTALL)
         if match:
             return json.loads(match.group(1))
@@ -144,29 +152,19 @@ def get_internal_links_html():
     return f'<div class="related-posts"><h3>Explore More Jeep Stories</h3><ul>{links}</ul></div>'
 
 # ==========================================
-# 🚀 INDEXING LOGS (FIXED & VERBOSE)
+# 🚀 INDEXING LOGS
 # ==========================================
 
 def submit_indexing(slug):
     full_url = f"{WEBSITE_URL}/{slug}/"
-    print(f"      📡 Starting Indexing Submissions for: {full_url}")
     
     # 1. IndexNow
     try:
         host = WEBSITE_URL.replace("https://", "").replace("http://", "")
-        data = {
-            "host": host, 
-            "key": INDEXNOW_KEY, 
-            "keyLocation": f"{WEBSITE_URL}/{INDEXNOW_KEY}.txt", 
-            "urlList": [full_url]
-        }
-        resp = requests.post("https://api.indexnow.org/indexnow", json=data, timeout=15)
-        if resp.status_code == 200:
-            print(f"      🚀 IndexNow Log: Success (HTTP 200)")
-        else:
-            print(f"      ⚠️ IndexNow Log: Failed (HTTP {resp.status_code})")
-    except Exception as e:
-        print(f"      ❌ IndexNow Log: Error - {e}")
+        data = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"{WEBSITE_URL}/{INDEXNOW_KEY}.txt", "urlList": [full_url]}
+        requests.post("https://api.indexnow.org/indexnow", json=data, timeout=10)
+        print(f"      🚀 IndexNow Log: {full_url} -> Submitted")
+    except: pass
 
     # 2. Google Indexing API
     if GOOGLE_JSON_KEY and GOOGLE_LIBS_AVAILABLE:
@@ -175,15 +173,9 @@ def submit_indexing(slug):
             credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, ["https://www.googleapis.com/auth/indexing"])
             service = build("indexing", "v3", credentials=credentials)
             service.urlNotifications().publish(body={"url": full_url, "type": "URL_UPDATED"}).execute()
-            print(f"      🚀 Google Index Log: Success")
+            print(f"      🚀 Google Index Log: {full_url} -> Success")
         except Exception as e:
-            print(f"      ❌ Google Index Log: Error - {e}")
-    else:
-        # Menjelaskan kenapa log Google tidak muncul
-        if not GOOGLE_JSON_KEY:
-            print("      ⚠️ Google Index Log: Skipped (GOOGLE_INDEXING_KEY not found)")
-        if not GOOGLE_LIBS_AVAILABLE:
-            print("      ⚠️ Google Index Log: Skipped (Library googleapiclient not installed)")
+            print(f"      ❌ Google Index Error: {e}")
 
 # ==========================================
 # 🎨 IMAGE GENERATOR
@@ -198,6 +190,7 @@ def generate_image(prompt, filename):
             img_data = requests.get(res['image_url']).content
             img = Image.open(BytesIO(img_data)).convert("RGB")
             draw = ImageDraw.Draw(img)
+            # Watermark simpel
             draw.text((20, 20), "@JeepDaily", fill=(255, 255, 255))
             output_path = f"{IMAGE_DIR}/{filename}"
             img.save(output_path, "WEBP", quality=90)
@@ -223,9 +216,9 @@ def generate_article_data(title, summary, source_link):
       "meta_desc": "Meta description 160 chars",
       "category": "Pick one (Wrangler Life, Off-road Tips, Jeep Mods, Classic Jeep)",
       "tags": ["tag1", "tag2"],
-      "content_markdown": "Detailed article content...",
+      "content_markdown": "Detailed article with H2, H3, H4, a technical table, and a pro-tip box.",
       "schema_json": {{ "@context": "https://schema.org", "@type": "Article", "headline": "..." }},
-      "image_prompt": "Vector cartoon description"
+      "image_prompt": "Vector cartoon description for image generation"
     }}
     """
     
@@ -244,6 +237,7 @@ def generate_article_data(title, summary, source_link):
 # ==========================================
 
 def main():
+    # Buat folder jika belum ada
     for d in [CONTENT_DIR, IMAGE_DIR, DATA_DIR]:
         os.makedirs(d, exist_ok=True)
 
@@ -252,11 +246,12 @@ def main():
     for cat, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Source: {cat}")
         feed = feedparser.parse(rss_url)
+        
         if not feed.entries:
             print("      ⚠️ Feed empty.")
             continue
 
-        for entry in feed.entries[:1]:
+        for entry in feed.entries[:1]: # 1 Artikel per sumber
             clean_title = entry.title.split(" - ")[0]
             slug = slugify(clean_title, max_length=50)
             file_path = f"{CONTENT_DIR}/{slug}.md"
@@ -267,13 +262,18 @@ def main():
 
             print(f"      📝 Processing: {clean_title}")
             
+            # 1. Teks
             data, author = generate_article_data(clean_title, entry.summary, entry.link)
             if not data: continue
 
+            # 2. Gambar
             image_url = generate_image(data.get('image_prompt', clean_title), f"{slug}.webp")
+
+            # 3. Internal Link & Schema
             internal_links = get_internal_links_html()
             schema_tag = f'<script type="application/ld+json">\n{json.dumps(data.get("schema_json", {}))}\n</script>'
 
+            # 4. Assembly Markdown
             md_content = f"""---
 title: "{data.get('seo_title', clean_title).replace('"', "'")}"
 date: {datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00")}
@@ -297,16 +297,17 @@ url: "/{slug}/"
 ---
 *Reference: Analysis by {author} based on [{clean_title}]({entry.link}).*
 """
+            # Simpan
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(md_content)
             
             save_link_to_memory(data.get('seo_title', clean_title), slug)
             
-            # --- INDEXING SECTION ---
+            # 5. Indexing
             submit_indexing(slug)
 
             print(f"      ✅ DONE: {slug}")
-            time.sleep(30)
+            time.sleep(30) # Jeda antar artikel
 
 if __name__ == "__main__":
     main()
