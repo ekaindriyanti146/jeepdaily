@@ -1,9 +1,9 @@
-name: Auto Post JeepDaily
+name: Auto Post tech News
 
 on:
   schedule:
     - cron: '0 */6 * * *' # Jalan setiap 6 jam
-  workflow_dispatch:      # Bisa dijalankan manual
+  workflow_dispatch:      # Bisa dijalankan manual (klik tombol Run)
 
 permissions:
   contents: write
@@ -23,36 +23,34 @@ jobs:
           python-version: '3.12' 
 
       - name: Install Dependencies
-        run: |
-          pip install groq curl_cffi feedparser python-slugify pillow oauth2client google-api-python-client requests pytz
-          
+        run: pip install -r automation/requirements.txt
+
       - name: Run Content Engine
         env:
-          # Pastikan Nama Secret di GitHub adalah GROK_SSO_TOKENS
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GROK_SSO_TOKENS: ${{ secrets.GROK_SSO_TOKENS }}
-          GROK_COOKIES: ${{ secrets.GROK_COOKIES }}
           GOOGLE_INDEXING_KEY: ${{ secrets.GOOGLE_INDEXING_KEY }} 
-          INDEXNOW_KEY: "e74819b68a0f40e98f6ec3dc24f610f0"
+          INDEXNOW_KEY: "bc7d619f55e44fbbae75c35e6a9b0f07"
         run: python automation/main.py
 
-      - name: Commit and Push Changes
+      - name: Commit and Push
         run: |
-          git config --global user.name "JeepDaily Bot"
-          git config --global user.email "bot@jeepdaily.com"
+          git config --global user.name "JeepBot"
+          git config --global user.email "bot@Jeepdaily.com"
           
-          # Tambahkan folder konten, gambar, dan DATA MEMORI agar internal link berfungsi
-          git add content/articles/ static/images/ automation/data/
+          git add .
           
+          # Cek jika ada perubahan
           if git diff --staged --quiet; then
             echo "No changes to commit. Bot sleeping."
           else
             echo "Changes detected. Committing..."
-            # [skip ci] mencegah GitHub Actions jalan terus menerus (looping)
-            git commit -m "🚀 New Jeep Articles & Memory Update [skip ci]"
+            # [skip ci] ditambahkan agar GitHub Actions tidak looping, 
+            # TAPI Netlify biasanya tetap akan mendeteksi ini dan melakukan deploy.
+            git commit -m "⚽ New tech Update [skip ci]"
             
-            # Pull rebase untuk menghindari konflik jika ada perubahan manual
+            # Pull dulu barangkali ada update manual dari Anda agar tidak crash
             git pull --rebase origin main
             
+            # Push ke main
             git push origin main
           fi
