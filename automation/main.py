@@ -80,7 +80,8 @@ def add_watermark(img):
 
 def generate_cartoon_image(keyword, filename):
     """
-    Generate gambar unik via Pollinations.ai dengan style Kartun/Vektor.
+    Generate gambar Kartun Unik menggunakan Pollinations.ai (Model Flux).
+    Versi ini memiliki Timeout panjang (120s) agar tidak revert ke gambar asli.
     """
     if not os.path.exists(IMAGE_DIR): os.makedirs(IMAGE_DIR, exist_ok=True)
     output_path = f"{IMAGE_DIR}/{filename}"
@@ -88,51 +89,70 @@ def generate_cartoon_image(keyword, filename):
     # Bersihkan keyword
     clean_keyword = keyword.replace('"', '').replace("'", "").strip()
     
-    # Random Seed = Kunci keunikan gambar (biar ga pernah sama)
+    # Seed acak agar gambar selalu beda
     seed = random.randint(1, 999999999)
     
-    # Prompt Engineering Khusus:
-    # Memaksa gaya "Vector Art" / "GTA Loading Screen Style" yang keren buat blog otomotif
+    # PROMPT KARTUN YANG LEBIH KUAT (GTA STYLE / VECTOR)
+    # Kita tambahkan "thick lines, flat color" agar tidak terlihat realis
     prompt = (
-        f"detailed vector art illustration of {clean_keyword}, jeep wrangler rubicon offroad action, "
-        f"dynamic angle, vibrant colors, flat shading, grand theft auto loading screen style, "
-        f"highly detailed, 8k resolution, cinematic lighting, masterpiece"
+        f"cartoon vector art of {clean_keyword}, jeep wrangler offroad action, "
+        f"grand theft auto loading screen style, thick outlines, flat vibrant colors, "
+        f"cel shaded, 2d game art, no photorealism, 8k resolution"
     )
     
     encoded_prompt = quote(prompt)
     
-    # URL Pollinations
+    # Menggunakan Model FLUX (Paling bagus buat kartun) & No Logo
     image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&seed={seed}&nologo=true&model=flux"
     
-    print(f"      🎨 Generating AI Art: '{clean_keyword}'")
+    print(f"      🎨 Generating AI Cartoon (Flux): '{clean_keyword}'")
     
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
     
     # Retry Logic (3x Percobaan)
     for attempt in range(3):
         try:
-            resp = requests.get(image_url, headers=headers, timeout=40)
+            # PERUBAHAN UTAMA: Timeout diperpanjang jadi 120 detik (2 Menit)
+            # Pollinations kadang butuh 40-60 detik saat server sibuk.
+            resp = requests.get(image_url, headers=headers, timeout=120)
+            
             if resp.status_code == 200:
                 img = Image.open(BytesIO(resp.content))
                 
                 # Tambah Watermark
                 img = add_watermark(img)
                 
-                # Simpan (High Quality WebP)
-                img.save(output_path, "WEBP", quality=92)
+                # Simpan WEBP High Quality
+                img.save(output_path, "WEBP", quality=95)
                 
-                # Validasi Ukuran File (Minimal 5KB)
+                # Cek apakah file berhasil tersimpan dan valid
                 if os.path.exists(output_path) and os.path.getsize(output_path) > 5000:
                     return f"/images/{filename}"
             else:
-                print(f"      ⚠️ Pollinations status: {resp.status_code}")
-                time.sleep(2)
+                print(f"      ⚠️ Pollinations Server Busy ({resp.status_code}). Retrying...")
+                time.sleep(5)
+                
         except Exception as e:
-            print(f"      ❌ Image Gen Failed ({attempt+1}/3): {e}")
-            time.sleep(2)
+            print(f"      ⏳ Image Gen Timeout/Error ({attempt+1}/3): {e}")
+            time.sleep(5)
 
-    # Fallback (Jangan sampai postingan gagal gara-gara gambar)
-    return "/images/default-jeep.webp"
+    # --- FALLBACK DARURAT (JIKA GAGAL TOTAL 3x) ---
+    # JANGAN pakai gambar realis. Kita paksa generate ulang dengan prompt super simpel.
+    # Ini untuk mencegah gambar gunung/asli muncul.
+    print("      ⚠️ Trying simple fallback generation...")
+    try:
+        simple_prompt = quote(f"cartoon jeep {clean_keyword}")
+        fallback_url = f"https://image.pollinations.ai/prompt/{simple_prompt}?width=1280&height=720&model=flux"
+        resp = requests.get(fallback_url, timeout=60)
+        img = Image.open(BytesIO(resp.content))
+        img = add_watermark(img)
+        img.save(output_path, "WEBP")
+        return f"/images/{filename}"
+    except:
+        # Jika internet mati total, baru return string kosong (artikel tanpa gambar lebih baik daripada gambar salah)
+        return ""
 
 # ==========================================
 # ⚙️ STANDARD CONFIG
