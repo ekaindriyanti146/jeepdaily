@@ -42,7 +42,7 @@ if not GROQ_API_KEYS:
     exit(1)
 
 # ==========================================
-# 🎨 POLLINATIONS AI ENGINE (CARTOON/VECTOR STYLE)
+# 🎨 POLLINATIONS AI ENGINE (ENHANCED STABILITY)
 # ==========================================
 
 def add_watermark(img):
@@ -80,79 +80,82 @@ def add_watermark(img):
 
 def generate_cartoon_image(keyword, filename):
     """
-    Generate gambar Kartun Unik menggunakan Pollinations.ai (Model Flux).
-    Versi ini memiliki Timeout panjang (120s) agar tidak revert ke gambar asli.
+    Versi Disempurnakan: Menggunakan Retry Logic + Model Fallback
+    Jika model 'flux' (berat) error/timeout, otomatis ganti ke 'turbo' (ringan).
     """
     if not os.path.exists(IMAGE_DIR): os.makedirs(IMAGE_DIR, exist_ok=True)
     output_path = f"{IMAGE_DIR}/{filename}"
     
-    # Bersihkan keyword
-    clean_keyword = keyword.replace('"', '').replace("'", "").strip()
-    
-    # Seed acak agar gambar selalu beda
-    seed = random.randint(1, 999999999)
-    
-    # PROMPT KARTUN YANG LEBIH KUAT (GTA STYLE / VECTOR)
-    # Kita tambahkan "thick lines, flat color" agar tidak terlihat realis
-    prompt = (
-        f"cartoon vector art of {clean_keyword}, jeep wrangler offroad action, "
-        f"grand theft auto loading screen style, thick outlines, flat vibrant colors, "
-        f"cel shaded, 2d game art, no photorealism, 8k resolution"
+    # 1. Bersihkan Keyword (Hapus karakter non-alphanumeric berlebih agar URL aman)
+    clean_keyword = re.sub(r'[^\w\s\-]', '', keyword).strip()
+    if len(clean_keyword) > 100: clean_keyword = clean_keyword[:100] # Truncate jika kepanjangan
+
+    # 2. Prompt Style
+    style_prompt = (
+        "cartoon vector art, jeep wrangler offroad action, "
+        "grand theft auto loading screen style, thick outlines, flat vibrant colors, "
+        "cel shaded, 2d game art, no photorealism, 8k resolution"
     )
     
-    encoded_prompt = quote(prompt)
+    full_prompt = f"{clean_keyword}, {style_prompt}"
+    encoded_prompt = quote(full_prompt)
     
-    # Menggunakan Model FLUX (Paling bagus buat kartun) & No Logo
-    image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&seed={seed}&nologo=true&model=flux"
-    
-    print(f"      🎨 Generating AI Cartoon (Flux): '{clean_keyword}'")
+    print(f"      🎨 Generating AI Image for: '{clean_keyword}'")
+
+    # 3. Strategi Retry & Model
+    # Percobaan 1 & 2 pakai Flux (Kualitas Bagus), Percobaan 3 pakai Turbo (Cepat/Cadangan)
+    attempts_config = [
+        {"model": "flux", "timeout": 120},
+        {"model": "flux", "timeout": 120},
+        {"model": "turbo", "timeout": 60} 
+    ]
     
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
-    
-    # Retry Logic (3x Percobaan)
-    for attempt in range(3):
+
+    for i, config in enumerate(attempts_config):
         try:
-            # PERUBAHAN UTAMA: Timeout diperpanjang jadi 120 detik (2 Menit)
-            # Pollinations kadang butuh 40-60 detik saat server sibuk.
-            resp = requests.get(image_url, headers=headers, timeout=120)
+            seed = random.randint(1000, 99999999) # Seed acak tiap request
+            model = config["model"]
+            timeout = config["timeout"]
+            
+            # URL Pollinations
+            image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&seed={seed}&nologo=true&model={model}"
+            
+            # Request
+            resp = requests.get(image_url, headers=headers, timeout=timeout)
             
             if resp.status_code == 200:
-                img = Image.open(BytesIO(resp.content))
-                
-                # Tambah Watermark
-                img = add_watermark(img)
-                
-                # Simpan WEBP High Quality
-                img.save(output_path, "WEBP", quality=95)
-                
-                # Cek apakah file berhasil tersimpan dan valid
-                if os.path.exists(output_path) and os.path.getsize(output_path) > 5000:
-                    return f"/images/{filename}"
+                # Cek apakah kontennya benar-benar gambar
+                if 'image' in resp.headers.get('Content-Type', ''):
+                    img = Image.open(BytesIO(resp.content))
+                    
+                    # Tambah Watermark
+                    img = add_watermark(img)
+                    
+                    # Simpan
+                    img.save(output_path, "WEBP", quality=90)
+                    
+                    # Validasi File
+                    if os.path.exists(output_path) and os.path.getsize(output_path) > 3000:
+                        return f"/images/{filename}"
+                else:
+                    print(f"      ⚠️ Attempt {i+1}: Received non-image content.")
             else:
-                print(f"      ⚠️ Pollinations Server Busy ({resp.status_code}). Retrying...")
-                time.sleep(5)
+                print(f"      ⚠️ Attempt {i+1}: Server Error {resp.status_code} (Model: {model})")
                 
+        except requests.exceptions.Timeout:
+            print(f"      ⏳ Attempt {i+1}: Timeout ({timeout}s) - Model {model} is busy.")
         except Exception as e:
-            print(f"      ⏳ Image Gen Timeout/Error ({attempt+1}/3): {e}")
-            time.sleep(5)
+            print(f"      ❌ Attempt {i+1}: Error: {e}")
+        
+        # Jeda waktu bertambah (Exponential Backoff) sebelum coba lagi
+        time.sleep(5 + (i * 3))
 
-    # --- FALLBACK DARURAT (JIKA GAGAL TOTAL 3x) ---
-    # JANGAN pakai gambar realis. Kita paksa generate ulang dengan prompt super simpel.
-    # Ini untuk mencegah gambar gunung/asli muncul.
-    print("      ⚠️ Trying simple fallback generation...")
-    try:
-        simple_prompt = quote(f"cartoon jeep {clean_keyword}")
-        fallback_url = f"https://image.pollinations.ai/prompt/{simple_prompt}?width=1280&height=720&model=flux"
-        resp = requests.get(fallback_url, timeout=60)
-        img = Image.open(BytesIO(resp.content))
-        img = add_watermark(img)
-        img.save(output_path, "WEBP")
-        return f"/images/{filename}"
-    except:
-        # Jika internet mati total, baru return string kosong (artikel tanpa gambar lebih baik daripada gambar salah)
-        return ""
+    # Jika semua percobaan gagal, return string kosong (jangan crash script)
+    print("      ❌ Failed to generate image after 3 attempts.")
+    return ""
 
 # ==========================================
 # ⚙️ STANDARD CONFIG
@@ -274,7 +277,7 @@ def get_groq_article_json(title, summary, link, author_name):
     
     ### 3. SEO RULES:
     - **Keywords:** Naturally weave the main topic into H2s and H3s.
-    - **Image Prompt:** Provide a specific 'main_keyword' for the AI image generator (e.g. "Green Jeep Wrangler Rubicon climbing rocky hill cartoon style").
+    - **Image Prompt:** Provide a specific 'main_keyword' for the AI image generator (e.g. "Green Jeep Wrangler Rubicon climbing rocky hill").
     
     ### 4. OUTPUT FORMAT:
     Return valid JSON with keys: 
@@ -295,7 +298,7 @@ def get_groq_article_json(title, summary, link, author_name):
             completion = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                temperature=0.6, # Agak rendah agar struktur konsisten
+                temperature=0.6,
                 max_tokens=7000,
                 response_format={"type": "json_object"}
             )
@@ -339,11 +342,15 @@ def main():
             try:
                 data = json.loads(raw_json)
                 
-                # 2. Generate Image (POLLINATIONS AI)
-                # Menggunakan keyword visual dari AI agar gambar 100% relevan
-                # Default ke title jika AI lupa ngasih keyword
-                image_keyword = data.get('main_keyword', clean_title)
+                # 2. Generate Image (POLLINATIONS AI ENHANCED)
+                # Fallback ke title jika main_keyword kosong
+                image_keyword = data.get('main_keyword', clean_title) 
+                
                 final_img = generate_cartoon_image(image_keyword, f"{slug}.webp")
+                
+                # Jika image gagal total, pakai placeholder atau string kosong
+                if not final_img:
+                    final_img = "" 
                 
                 # 3. Assemble Markdown
                 clean_body = clean_ai_content(data['content_body'])
@@ -383,8 +390,8 @@ url: "/{slug}/"
                 print(f"      ✅ Successfully Published: {slug}")
                 processed += 1
                 
-                # Jeda wajib agar Pollinations tidak reject request kita
-                time.sleep(6) 
+                # Jeda agar Pollinations dan API Groq tidak overload
+                time.sleep(8) 
             except Exception as e:
                 print(f"      ❌ Critical Error: {e}")
 
