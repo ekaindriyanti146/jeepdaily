@@ -2,6 +2,7 @@ fastapi
 uvicorn
 curl_cffi
 orjson
+groq
 toml
 aiofiles
 portalocker
