@@ -10,7 +10,7 @@ import string
 from datetime import datetime
 from slugify import slugify
 from io import BytesIO
-from PIL import Image, ImageEnhance, ImageOps, ImageFilter
+from PIL import Image, ImageEnhance, ImageOps, ImageFilter, ImageDraw, ImageFont
 
 # --- SUPPRESS WARNINGS ---
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -27,30 +27,29 @@ except ImportError:
 # ⚙️ CONFIGURATION & SETUP
 # ==========================================
 
-# ⚠️ URL INI SANGAT PENTING. JANGAN UBAH FORMATNYA.
-# Format yang benar untuk Direct API Hugging Face Space adalah:
-# https://{username}-{spacename}.hf.space/v1/chat/completions
+# Endpoint Gateway Hugging Face (JANGAN DIGANTI)
 GROK_API_URL = "https://velmamore-grok-api-free.hf.space/v1/chat/completions"
-
-# API Key Admin (Sesuai settingan di Admin Panel server Anda)
 GROK_API_KEY = os.environ.get("GROK_API_KEY", "admin") 
 
-WEBSITE_URL = "https://beastion.biz.id" 
+WEBSITE_URL = "https://dother.biz.id" 
 INDEXNOW_KEY = "e74819b68a0f40e98f6ec3dc24f610f0" 
 GOOGLE_JSON_KEY = os.environ.get("GOOGLE_INDEXING_KEY", "") 
 
-# TIM PENULIS
+# TIM PENULIS (SPESIALIS JEEP)
 AUTHOR_PROFILES = [
-    "Dave Harsya (Tactical Analyst)", "Sarah Jenkins (Senior Editor)",
-    "Luca Romano (Market Expert)", "Marcus Reynolds (League Correspondent)",
-    "Ben Foster (Data Journalist)"
+    "Rick 'Muddy' O'Connell (Off-road Expert)", 
+    "Sarah Miller (Automotive Historian)",
+    "Mike Stevens (Jeep Mechanic)", 
+    "Tom Davidson (4x4 Reviewer)",
+    "Elena Forza (Car Design Analyst)"
 ]
 
+# RSS KHUSUS JEEP
 RSS_SOURCES = {
-    "SkySports": "https://www.skysports.com/rss/12040",
-    "BBC Football": "https://feeds.bbci.co.uk/sport/football/rss.xml",
-    "ESPN FC": "https://www.espn.com/espn/rss/soccer/news",
-    "The Guardian": "https://www.theguardian.com/football/rss"
+    "Wrangler Life": "https://news.google.com/rss/search?q=Jeep+Wrangler+Review+News&hl=en-US&gl=US&ceid=US:en",
+    "Off-road Tips": "https://news.google.com/rss/search?q=Offroad+4x4+Adventure+Tips&hl=en-US&gl=US&ceid=US:en",
+    "Jeep Mods": "https://news.google.com/rss/search?q=Jeep+Wrangler+Modifications&hl=en-US&gl=US&ceid=US:en",
+    "Classic Jeep": "https://news.google.com/rss/search?q=Classic+Jeep+History+Willys&hl=en-US&gl=US&ceid=US:en"
 }
 
 CONTENT_DIR = "content/articles" 
@@ -74,10 +73,25 @@ def save_link_to_memory(title, slug):
     memory[title] = f"/articles/{slug}" 
     with open(MEMORY_FILE, 'w') as f: json.dump(memory, f, indent=2)
 
+def get_internal_links_markdown():
+    memory = load_link_memory()
+    if not memory: return ""
+    items = list(memory.items())
+    selected = random.sample(items, min(len(items), 3))
+    return "\n".join([f"- [{title}]({url})" for title, url in selected])
+
+def get_random_user_agent():
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ]
+    return random.choice(user_agents)
+
 def fetch_rss_feed(url):
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    headers = {'User-Agent': get_random_user_agent()}
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=15)
         return feedparser.parse(response.content) if response.status_code == 200 else None
     except: return None
 
@@ -89,128 +103,144 @@ def clean_ai_content(text):
     return text.strip()
 
 # ==========================================
-# 🤖 GROK GATEWAY CLIENT (ROBUST VERSION)
+# 🤖 GROK GATEWAY CLIENT (ANTI-BLOCK)
 # ==========================================
 
-def check_server_health():
-    """Mengecek apakah Server Hugging Face Hidup/Bangun"""
-    print("      🔍 Checking Grok Server status...")
-    try:
-        # Ping root domain untuk membangunkan space
-        root_url = "https://velmamore-grok-api-free.hf.space"
-        requests.get(root_url, timeout=5)
-    except:
-        pass # Ignore error on ping, just try to wake it up
-
 def call_grok_gateway(messages, model="grok-4.1"):
-    """
-    Memanggil API dengan penanganan Error HTML (404/502/503) yang lebih baik.
-    """
-    headers = {
-        "Authorization": f"Bearer {GROK_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    url = GROK_API_URL
     payload = {
         "model": model,
         "messages": messages,
         "stream": False
     }
-    
-    try:
-        response = requests.post(GROK_API_URL, headers=headers, json=payload, timeout=120)
-        
-        # Cek jika responsenya HTML (Tanda Server Error / Salah URL)
-        content_type = response.headers.get('Content-Type', '')
-        if 'text/html' in content_type:
-            print(f"      ❌ SERVER ERROR: Hugging Face Space is returning HTML (404/500).")
-            print(f"      👉 Penyebab: Server sedang 'Building', 'Sleeping', atau URL salah.")
-            return None
 
-        if response.status_code == 200:
-            return response.json()
-        else:
-            print(f"      ⚠️ API Error {response.status_code}: {response.text[:200]}")
-            return None
+    max_retries = 3
+    for attempt in range(max_retries):
+        headers = {
+            "Authorization": f"Bearer {GROK_API_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": get_random_user_agent(),
+            "Origin": "https://huggingface.co",
+            "Referer": "https://huggingface.co/"
+        }
+
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=120)
             
-    except Exception as e:
-        print(f"      ⚠️ Connection Exception: {e}")
-        return None
+            # Cek jika server HF sedang tidur/loading (biasanya return HTML)
+            if 'text/html' in response.headers.get('Content-Type', ''):
+                print("      ⚠️ Server is sleeping/building. Waiting 20s...")
+                time.sleep(20)
+                continue
+
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code in [403, 429, 500, 503]:
+                wait_time = (attempt + 1) * 20
+                print(f"      ⚠️ API Error {response.status_code}. Waiting {wait_time}s...")
+                time.sleep(wait_time)
+                continue
+            else:
+                print(f"      ❌ API Error: {response.status_code}")
+                return None
+        except Exception as e:
+            print(f"      ⚠️ Connection Error: {e}")
+            time.sleep(10)
+    
+    return None
 
 # ==========================================
-# 🎨 IMAGE GENERATION
+# 🎨 IMAGE GENERATION (JEEP STYLE)
 # ==========================================
 
 def generate_image_grok(keyword, filename):
     output_path = f"{IMAGE_DIR}/{filename}"
     
-    # Prompt khusus untuk trigger Image Gen di Grok Gateway
-    prompt = f"Draw a realistic high-quality sports photo of {keyword}. Action shot, 4k resolution."
+    # PROMPT KHUSUS JEEP / GTA STYLE
+    prompt = f"Draw a vector art illustration of {keyword}, jeep wrangler style, offroad action, gta loading screen vibe, vibrant colors, thick outlines, 4k resolution."
     
     print(f"      🎨 Requesting Image: {keyword}")
     
-    # Gunakan model grok-4.1 (Support Image)
+    # Gunakan grok-4.1 untuk trigger gambar
     response = call_grok_gateway([{"role": "user", "content": prompt}], model="grok-4.1")
     
     if response and 'choices' in response:
         content = response['choices'][0]['message']['content']
-        
-        # Ekstrak URL gambar dari markdown/text
         urls = re.findall(r'(https?://[^\s)]+)', content)
-        image_url = None
         
-        # Cari URL yang valid
+        image_url = None
         for url in urls:
             clean_url = url.split(')')[0].strip('."')
             if any(x in clean_url for x in ['generated', 'blob', 'png', 'jpg', 'webp']):
                 image_url = clean_url
                 break
         
-        # Download jika URL ketemu
         if image_url:
             try:
-                print(f"      ⬇️ Downloading: {image_url[:40]}...")
-                img_resp = requests.get(image_url, timeout=30)
+                print(f"      ⬇️ Downloading Image...")
+                img_resp = requests.get(image_url, headers={'User-Agent': get_random_user_agent()}, timeout=30)
                 if img_resp.status_code == 200:
                     img = Image.open(BytesIO(img_resp.content)).convert("RGB")
-                    img = img.resize((1200, 675), Image.Resampling.LANCZOS)
-                    img.save(output_path, "WEBP", quality=85)
+                    
+                    # Tambah Watermark
+                    draw = ImageDraw.Draw(img)
+                    try:
+                        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
+                    except:
+                        font = ImageFont.load_default()
+                    draw.text((20, 20), "@JeepDaily", fill=(255, 255, 255), font=font)
+                    
+                    img.save(output_path, "WEBP", quality=90)
                     return f"/images/{filename}"
             except Exception as e:
                 print(f"      ⚠️ Download Failed: {e}")
 
-    # Fallback Unsplash
+    # Fallback Unsplash (Kalau Grok gagal)
     print("      ⚠️ Grok Image Failed. Using Fallback.")
-    return "https://images.unsplash.com/photo-1522778119026-d647f0565c6a?auto=format&fit=crop&w=1200&q=80"
+    return "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=80"
 
 # ==========================================
-# 📝 ARTICLE GENERATION
+# 📝 ARTICLE GENERATION (JEEP NICHE)
 # ==========================================
 
 def generate_article_grok(title, summary, link, author_name):
     current_date = datetime.now().strftime("%Y-%m-%d")
     
     system_prompt = f"""
-    You are {author_name}, a sports journalist. Date: {current_date}.
-    Write a 800-word analysis article in MARKDOWN format.
-    Return ONLY a JSON object with keys: title, description, category, main_keyword, tags, content_body.
+    You are {author_name}, a Jeep Brand Specialist. Date: {current_date}.
+    Write a 1000-word SEO article about Jeep/Offroad.
+    
+    RULES:
+    1. Use Markdown (H2, H3, Tables).
+    2. Tone: Enthusiastic, Technical, Adventurous.
+    3. Include technical specs if relevant.
+    4. NO HTML.
+    
+    OUTPUT JSON ONLY:
+    {{
+        "title": "SEO Title",
+        "description": "Meta description",
+        "category": "One of [Wrangler Life, Off-road Tips, Jeep Mods, Classic Jeep]",
+        "main_keyword": "Keyword for image gen",
+        "tags": ["tag1", "tag2"],
+        "content_body": "Full markdown content..."
+    }}
     """
     
-    user_prompt = f"News: {title}\nSummary: {summary}\nLink: {link}"
+    user_prompt = f"Topic: {title}\nContext: {summary}\nLink: {link}"
     
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt}
     ]
     
-    print(f"      🤖 Grok Writing...")
-    # Gunakan grok-4-fast untuk artikel
+    print(f"      🤖 Grok Writing Article...")
+    # Gunakan grok-4-fast untuk artikel (lebih cepat & hemat)
     response = call_grok_gateway(messages, model="grok-4-fast")
     
     if response and 'choices' in response:
         content = response['choices'][0]['message']['content']
         content = clean_ai_content(content)
-        
-        # Ekstrak JSON paksa (in case ada teks pembuka)
         try:
             match = re.search(r'\{.*\}', content, re.DOTALL)
             if match: return match.group(0)
@@ -227,10 +257,12 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print(f"🔥 ENGINE STARTED: GROK GATEWAY")
+    print(f"🔥 JEEP ENGINE STARTED: HF GATEWAY MODE")
     
-    # 1. Cek Server Dulu!
-    check_server_health()
+    # Ping Server
+    try:
+        requests.get("https://velmamore-grok-api-free.hf.space", timeout=5)
+    except: pass
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 RSS Source: {source_name}")
@@ -249,27 +281,29 @@ def main():
             
             print(f"   ⚡ Processing: {clean_title[:30]}...")
             
-            # GENERATE ARTIKEL
+            # 1. GENERATE ARTIKEL
             author = random.choice(AUTHOR_PROFILES)
             raw_json = generate_article_grok(clean_title, entry.summary, entry.link, author)
             
             if not raw_json: 
-                print("      ❌ Failed to get content response.")
+                print("      ❌ Failed to get content. Skipping.")
+                time.sleep(10)
                 continue
 
             try:
                 data = json.loads(raw_json)
             except:
-                print("      ❌ JSON Parsing Error.")
+                print("      ❌ JSON Parsing Error. Skipping.")
                 continue
 
-            # GENERATE GAMBAR
+            # 2. GENERATE GAMBAR (JEEP STYLE)
             keyword = data.get('main_keyword') or clean_title
             final_img = generate_image_grok(keyword, f"{slug}.webp")
             
-            # SAVE MARKDOWN
+            # 3. SAVE MARKDOWN
             md_body = clean_ai_content(data['content_body'])
-            cat = data.get('category', 'International')
+            cat = data.get('category', 'Wrangler Life')
+            links_md = get_internal_links_markdown()
             
             md_content = f"""---
 title: "{data['title'].replace('"', "'")}"
@@ -284,19 +318,32 @@ url: "/{slug}/"
 ---
 
 {md_body}
+
+### Explore More
+{links_md}
 """
             with open(f"{CONTENT_DIR}/{filename}", "w", encoding="utf-8") as f:
                 f.write(md_content)
             
             save_link_to_memory(data['title'], slug)
             
-            # Submit Indexing
-            full_url = f"{WEBSITE_URL}/articles/{slug}/"
-            # (Fungsi submit indexnow/google ada di blok import awal jika diperlukan)
-            
+            # 4. SUBMIT INDEXING
+            full_url = f"{WEBSITE_URL}/{slug}/"
+            try:
+                requests.post("https://api.indexnow.org/indexnow", json={
+                    "host": WEBSITE_URL.replace("https://", ""),
+                    "key": INDEXNOW_KEY,
+                    "urlList": [full_url]
+                }, timeout=5)
+                print("      🚀 IndexNow Submitted")
+            except: pass
+
             print(f"      ✅ Published: {slug}")
             processed += 1
-            time.sleep(5)
+            
+            # Cooling Down (Penting!)
+            print("      💤 Cooling down (45s)...")
+            time.sleep(45)
 
 if __name__ == "__main__":
     main()
