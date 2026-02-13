@@ -42,24 +42,22 @@ if not GROQ_API_KEYS:
     exit(1)
 
 # ==========================================
-# 🎨 POLLINATIONS AI ENGINE (ENHANCED STABILITY)
+# 🎨 POLLINATIONS AI ENGINE (FIXED FOR ERROR 530)
 # ==========================================
 
 def add_watermark(img):
-    """Menambahkan watermark @JeepDaily dengan shadow agar terbaca jelas"""
+    """Menambahkan watermark @JeepDaily dengan shadow"""
     try:
         img = img.convert("RGB")
         draw = ImageDraw.Draw(img)
         text = "@JeepDaily"
         
-        # Coba load font tebal, fallback ke default
+        # Coba load font, fallback ke default
         try:
-            # Path font umum di server Linux/Ubuntu
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
         except:
             font = ImageFont.load_default()
             
-        # Posisi Kanan Atas (Margin 40px)
         img_w, img_h = img.size
         text_bbox = draw.textbbox((0, 0), text, font=font)
         text_w = text_bbox[2] - text_bbox[0]
@@ -68,9 +66,8 @@ def add_watermark(img):
         x = img_w - text_w - 40
         y = 40
         
-        # Shadow Effect (Hitam Transparan)
+        # Shadow & Main Text
         draw.text((x+3, y+3), text, fill=(0, 0, 0, 160), font=font)
-        # Main Text (Putih Terang)
         draw.text((x, y), text, fill=(255, 255, 255, 240), font=font)
         
         return img
@@ -80,81 +77,75 @@ def add_watermark(img):
 
 def generate_cartoon_image(keyword, filename):
     """
-    Versi Disempurnakan: Menggunakan Retry Logic + Model Fallback
-    Jika model 'flux' (berat) error/timeout, otomatis ganti ke 'turbo' (ringan).
+    Generate gambar dengan penanganan Error 530 (IP/DNS Block)
     """
     if not os.path.exists(IMAGE_DIR): os.makedirs(IMAGE_DIR, exist_ok=True)
     output_path = f"{IMAGE_DIR}/{filename}"
     
-    # 1. Bersihkan Keyword (Hapus karakter non-alphanumeric berlebih agar URL aman)
+    # 1. Bersihkan Keyword Secara Agresif (Hapus karakter aneh)
+    # Error 530 sering terjadi karena URL terlalu panjang atau karakter invalid
     clean_keyword = re.sub(r'[^\w\s\-]', '', keyword).strip()
-    if len(clean_keyword) > 100: clean_keyword = clean_keyword[:100] # Truncate jika kepanjangan
+    
+    # Potong keyword jika terlalu panjang (Max 80 chars untuk keyword utama)
+    if len(clean_keyword) > 80:
+        clean_keyword = clean_keyword[:80]
 
     # 2. Prompt Style
-    style_prompt = (
-        "cartoon vector art, jeep wrangler offroad action, "
-        "grand theft auto loading screen style, thick outlines, flat vibrant colors, "
-        "cel shaded, 2d game art, no photorealism, 8k resolution"
-    )
+    style_prompt = "cartoon vector, jeep offroad, gta style, flat color, 8k"
     
-    full_prompt = f"{clean_keyword}, {style_prompt}"
+    # Gabungkan dan encode
+    full_prompt = f"{clean_keyword} {style_prompt}"
     encoded_prompt = quote(full_prompt)
     
     print(f"      🎨 Generating AI Image for: '{clean_keyword}'")
 
-    # 3. Strategi Retry & Model
-    # Percobaan 1 & 2 pakai Flux (Kualitas Bagus), Percobaan 3 pakai Turbo (Cepat/Cadangan)
+    # 3. Konfigurasi Request (Headers Wajib untuk menghindari blokir 530)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Referer': 'https://pollinations.ai/',
+        'Accept-Language': 'en-US,en;q=0.9'
+    }
+
+    # Percobaan: Flux (High Quality) -> Turbo (Fast/Stable) -> Turbo (Backup)
     attempts_config = [
         {"model": "flux", "timeout": 120},
-        {"model": "flux", "timeout": 120},
+        {"model": "turbo", "timeout": 60}, 
         {"model": "turbo", "timeout": 60} 
     ]
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
 
     for i, config in enumerate(attempts_config):
         try:
-            seed = random.randint(1000, 99999999) # Seed acak tiap request
+            seed = random.randint(100, 99999999)
             model = config["model"]
-            timeout = config["timeout"]
             
-            # URL Pollinations
-            image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&seed={seed}&nologo=true&model={model}"
+            # Trik: Tambahkan .jpg di akhir prompt path agar server lebih mudah mengenali tipe konten
+            image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}.jpg?width=1280&height=720&seed={seed}&nologo=true&model={model}"
             
-            # Request
-            resp = requests.get(image_url, headers=headers, timeout=timeout)
+            resp = requests.get(image_url, headers=headers, timeout=config["timeout"])
             
             if resp.status_code == 200:
-                # Cek apakah kontennya benar-benar gambar
+                # Cek Content-Type untuk memastikan bukan halaman error HTML
                 if 'image' in resp.headers.get('Content-Type', ''):
                     img = Image.open(BytesIO(resp.content))
-                    
-                    # Tambah Watermark
                     img = add_watermark(img)
-                    
-                    # Simpan
                     img.save(output_path, "WEBP", quality=90)
                     
-                    # Validasi File
                     if os.path.exists(output_path) and os.path.getsize(output_path) > 3000:
                         return f"/images/{filename}"
                 else:
                     print(f"      ⚠️ Attempt {i+1}: Received non-image content.")
             else:
+                # Jika error 530/429/500, print code-nya
                 print(f"      ⚠️ Attempt {i+1}: Server Error {resp.status_code} (Model: {model})")
                 
-        except requests.exceptions.Timeout:
-            print(f"      ⏳ Attempt {i+1}: Timeout ({timeout}s) - Model {model} is busy.")
         except Exception as e:
-            print(f"      ❌ Attempt {i+1}: Error: {e}")
+            print(f"      ⏳ Attempt {i+1}: Error/Timeout: {e}")
         
-        # Jeda waktu bertambah (Exponential Backoff) sebelum coba lagi
-        time.sleep(5 + (i * 3))
+        # Backoff: Jeda 5 detik sebelum coba lagi
+        time.sleep(5)
 
-    # Jika semua percobaan gagal, return string kosong (jangan crash script)
-    print("      ❌ Failed to generate image after 3 attempts.")
+    print("      ❌ Failed to generate image. Using fallback logic if available.")
     return ""
 
 # ==========================================
@@ -220,7 +211,6 @@ def fetch_rss_feed(url):
 
 def clean_ai_content(text):
     if not text: return ""
-    # Hapus wrapper markdown ``` yang sering dikasih AI
     text = re.sub(r'^```[a-zA-Z]*\n', '', text)
     text = re.sub(r'\n```$', '', text)
     text = text.replace("```", "")
@@ -251,42 +241,25 @@ def submit_to_google(url):
     except: pass
 
 # ==========================================
-# 🧠 CONTENT ENGINE (SEO EXPERT MODE - H2/H3/H4)
+# 🧠 CONTENT ENGINE
 # ==========================================
 
 def get_groq_article_json(title, summary, link, author_name):
-    # PROMPT PREMIUM: Memaksa struktur SEO yang benar
     system_prompt = f"""
     You are {author_name}, a Senior Automotive Journalist & SEO Specialist.
+    TASK: Write a comprehensive blog post (1000+ words).
     
-    TASK: Write a comprehensive, highly structured blog post (1000+ words).
+    ### STRUCTURE:
+    - **H1:** Provided.
+    - **H2 (##):** 3-4 Main Headings.
+    - **H3 (###):** Sub-headings.
+    - **Tables:** Must include a Markdown Table.
+    - **Lists:** Bullet points for features.
     
-    ### 1. STRUCTURE RULES (STRICT):
-    - **H1 (Title):** Already provided, do not repeat in body.
-    - **Introduction:** Hook the reader immediately. NO label "Introduction".
-    - **H2 (##):** Use at least 3-4 Main Headings for major topics.
-    - **H3 (###):** Use Sub-headings under H2 to break down complex ideas.
-    - **H4 (####):** Use for very specific technical details (e.g., "3.6L Pentastar V6 Specs").
-    - **Tables:** You MUST include a Markdown Table for specs, pros/cons, or comparisons.
-    - **Lists:** Use bullet points for features.
+    ### OUTPUT JSON KEYS: 
+    - "title", "description", "category", "main_keyword", "tags", "content_body"
     
-    ### 2. STYLE RULES:
-    - **Tone:** Authoritative, technical, yet accessible. 
-    - **Forbidden Words:** Do NOT use "In conclusion", "Overall", "Let's dive in", "Unleashing", "A tapestry of".
-    - **Perspective:** Write from experience (e.g., "When on the trail...").
-    
-    ### 3. SEO RULES:
-    - **Keywords:** Naturally weave the main topic into H2s and H3s.
-    - **Image Prompt:** Provide a specific 'main_keyword' for the AI image generator (e.g. "Green Jeep Wrangler Rubicon climbing rocky hill").
-    
-    ### 4. OUTPUT FORMAT:
-    Return valid JSON with keys: 
-    - "title" (SEO optimized)
-    - "description" (Meta description, max 160 chars)
-    - "category" (Pick one: Wrangler Life, Classic Jeeps, Gladiator Truck, Off-road Tips)
-    - "main_keyword" (For image generation)
-    - "tags" (Array of strings)
-    - "content_body" (The full article in Markdown)
+    Note: 'main_keyword' should be a short visual description for an image (max 6 words).
     """
     
     user_prompt = f"Topic: {title}\nSummary context: {summary}\nSource Link: {link}"
@@ -316,7 +289,7 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print("🔥 JEEP ENGINE STARTED (SEO MODE + POLLINATIONS CARTOON) 🔥")
+    print("🔥 JEEP ENGINE STARTED (SEO MODE + POLLINATIONS FIX) 🔥")
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Reading Source: {source_name}")
@@ -335,24 +308,18 @@ def main():
             
             author = random.choice(AUTHOR_PROFILES)
             
-            # 1. Generate Content (JSON)
+            # 1. Content
             raw_json = get_groq_article_json(clean_title, entry.summary, entry.link, author)
             if not raw_json: continue
             
             try:
                 data = json.loads(raw_json)
                 
-                # 2. Generate Image (POLLINATIONS AI ENHANCED)
-                # Fallback ke title jika main_keyword kosong
-                image_keyword = data.get('main_keyword', clean_title) 
-                
+                # 2. Image (Gunakan keyword dari AI, potong jika terlalu panjang)
+                image_keyword = data.get('main_keyword', clean_title)
                 final_img = generate_cartoon_image(image_keyword, f"{slug}.webp")
                 
-                # Jika image gagal total, pakai placeholder atau string kosong
-                if not final_img:
-                    final_img = "" 
-                
-                # 3. Assemble Markdown
+                # 3. Save
                 clean_body = clean_ai_content(data['content_body'])
                 links_md = get_internal_links_markdown()
                 final_body = clean_body + "\n\n### Explore More\n" + links_md
@@ -390,8 +357,8 @@ url: "/{slug}/"
                 print(f"      ✅ Successfully Published: {slug}")
                 processed += 1
                 
-                # Jeda agar Pollinations dan API Groq tidak overload
-                time.sleep(8) 
+                # Wajib Sleep agar IP tidak diblokir Pollinations
+                time.sleep(10) 
             except Exception as e:
                 print(f"      ❌ Critical Error: {e}")
 
