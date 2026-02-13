@@ -6,6 +6,7 @@ import time
 import re
 import random
 import warnings 
+import subprocess
 import string
 from urllib.parse import quote
 from datetime import datetime
@@ -42,17 +43,22 @@ if not GROQ_API_KEYS:
     exit(1)
 
 # ==========================================
-# 🎨 POLLINATIONS AI ENGINE (FIXED FOR ERROR 530)
+# 🎨 POLLINATIONS AI ENGINE (CURL BYPASS VERSION)
 # ==========================================
 
-def add_watermark(img):
-    """Menambahkan watermark @JeepDaily dengan shadow"""
+def add_watermark(image_path):
+    """
+    Membuka gambar dari path, memberi watermark, lalu save ulang (overwrite).
+    """
     try:
+        if not os.path.exists(image_path): return
+        
+        img = Image.open(image_path)
         img = img.convert("RGB")
         draw = ImageDraw.Draw(img)
         text = "@JeepDaily"
         
-        # Coba load font, fallback ke default
+        # Font handling
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
         except:
@@ -66,86 +72,80 @@ def add_watermark(img):
         x = img_w - text_w - 40
         y = 40
         
-        # Shadow & Main Text
+        # Shadow & Text
         draw.text((x+3, y+3), text, fill=(0, 0, 0, 160), font=font)
         draw.text((x, y), text, fill=(255, 255, 255, 240), font=font)
         
-        return img
+        # Save overwrite as optimized WEBP
+        img.save(image_path, "WEBP", quality=90)
+        
     except Exception as e:
         print(f"      ⚠️ Watermark error: {e}")
-        return img
 
 def generate_cartoon_image(keyword, filename):
     """
-    Generate gambar dengan penanganan Error 530 (IP/DNS Block)
+    Menggunakan 'curl' sistem operasi untuk bypass Error 530/403.
     """
     if not os.path.exists(IMAGE_DIR): os.makedirs(IMAGE_DIR, exist_ok=True)
     output_path = f"{IMAGE_DIR}/{filename}"
     
-    # 1. Bersihkan Keyword Secara Agresif (Hapus karakter aneh)
-    # Error 530 sering terjadi karena URL terlalu panjang atau karakter invalid
-    clean_keyword = re.sub(r'[^\w\s\-]', '', keyword).strip()
+    # 1. Bersihkan Keyword (Hanya alphanumeric) agar URL bersih
+    clean_keyword = re.sub(r'[^\w\s]', '', keyword).strip()
+    if len(clean_keyword) > 80: clean_keyword = clean_keyword[:80]
     
-    # Potong keyword jika terlalu panjang (Max 80 chars untuk keyword utama)
-    if len(clean_keyword) > 80:
-        clean_keyword = clean_keyword[:80]
-
     # 2. Prompt Style
-    style_prompt = "cartoon vector, jeep offroad, gta style, flat color, 8k"
-    
-    # Gabungkan dan encode
-    full_prompt = f"{clean_keyword} {style_prompt}"
-    encoded_prompt = quote(full_prompt)
+    prompt = f"{clean_keyword} cartoon vector art jeep offroad gta style flat color 8k"
+    encoded_prompt = quote(prompt)
     
     print(f"      🎨 Generating AI Image for: '{clean_keyword}'")
 
-    # 3. Konfigurasi Request (Headers Wajib untuk menghindari blokir 530)
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-        'Referer': 'https://pollinations.ai/',
-        'Accept-Language': 'en-US,en;q=0.9'
-    }
-
-    # Percobaan: Flux (High Quality) -> Turbo (Fast/Stable) -> Turbo (Backup)
-    attempts_config = [
-        {"model": "flux", "timeout": 120},
-        {"model": "turbo", "timeout": 60}, 
-        {"model": "turbo", "timeout": 60} 
-    ]
-
-    for i, config in enumerate(attempts_config):
+    # 3. List Model untuk dicoba
+    # Kita coba 'flux' dulu, kalau gagal 'turbo'
+    models = ["flux", "turbo"]
+    
+    for model in models:
         try:
             seed = random.randint(100, 99999999)
-            model = config["model"]
+            # URL Pollinations
+            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&seed={seed}&nologo=true&model={model}"
             
-            # Trik: Tambahkan .jpg di akhir prompt path agar server lebih mudah mengenali tipe konten
-            image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}.jpg?width=1280&height=720&seed={seed}&nologo=true&model={model}"
+            # --- TEKNIK CURL (BYPASS PYTHON REQUESTS) ---
+            # Kita panggil command line linux 'curl' yang lebih tahan banting
+            command = [
+                "curl", 
+                "-L",                # Follow redirects
+                "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", # User Agent Palsu
+                "--retry", "2",      # Coba ulang 2x jika putus
+                "--max-time", "60",  # Timeout 60 detik
+                "-o", output_path,   # Output ke file
+                url
+            ]
             
-            resp = requests.get(image_url, headers=headers, timeout=config["timeout"])
+            # Jalankan perintah
+            result = subprocess.run(command, capture_output=True, text=True)
             
-            if resp.status_code == 200:
-                # Cek Content-Type untuk memastikan bukan halaman error HTML
-                if 'image' in resp.headers.get('Content-Type', ''):
-                    img = Image.open(BytesIO(resp.content))
-                    img = add_watermark(img)
-                    img.save(output_path, "WEBP", quality=90)
+            # Cek apakah file berhasil didownload
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 3000:
+                # Cek header file apakah benar gambar (bukan HTML error)
+                try:
+                    img_check = Image.open(output_path)
+                    img_check.verify() # Validasi integritas gambar
                     
-                    if os.path.exists(output_path) and os.path.getsize(output_path) > 3000:
-                        return f"/images/{filename}"
-                else:
-                    print(f"      ⚠️ Attempt {i+1}: Received non-image content.")
+                    # Jika valid, beri watermark
+                    add_watermark(output_path)
+                    return f"/images/{filename}"
+                except Exception:
+                    print(f"      ⚠️ File downloaded but corrupted/invalid image (Model: {model})")
+                    os.remove(output_path) # Hapus file rusak
             else:
-                # Jika error 530/429/500, print code-nya
-                print(f"      ⚠️ Attempt {i+1}: Server Error {resp.status_code} (Model: {model})")
+                print(f"      ⚠️ Curl failed or empty file (Model: {model})")
                 
         except Exception as e:
-            print(f"      ⏳ Attempt {i+1}: Error/Timeout: {e}")
-        
-        # Backoff: Jeda 5 detik sebelum coba lagi
-        time.sleep(5)
+            print(f"      ❌ System Call Error: {e}")
+            
+        time.sleep(3) # Jeda sebelum ganti model
 
-    print("      ❌ Failed to generate image. Using fallback logic if available.")
+    print("      ❌ Failed to generate image with all methods.")
     return ""
 
 # ==========================================
@@ -289,7 +289,7 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print("🔥 JEEP ENGINE STARTED (SEO MODE + POLLINATIONS FIX) 🔥")
+    print("🔥 JEEP ENGINE STARTED (CURL MODE ACTIVATED) 🔥")
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Reading Source: {source_name}")
@@ -315,10 +315,13 @@ def main():
             try:
                 data = json.loads(raw_json)
                 
-                # 2. Image (Gunakan keyword dari AI, potong jika terlalu panjang)
+                # 2. Image (Call CURL function)
                 image_keyword = data.get('main_keyword', clean_title)
                 final_img = generate_cartoon_image(image_keyword, f"{slug}.webp")
                 
+                # Jika masih kosong juga, isi string kosong biar gak error
+                if not final_img: final_img = ""
+
                 # 3. Save
                 clean_body = clean_ai_content(data['content_body'])
                 links_md = get_internal_links_markdown()
@@ -357,8 +360,8 @@ url: "/{slug}/"
                 print(f"      ✅ Successfully Published: {slug}")
                 processed += 1
                 
-                # Wajib Sleep agar IP tidak diblokir Pollinations
-                time.sleep(10) 
+                # Jeda agar IP tidak dibanned
+                time.sleep(8) 
             except Exception as e:
                 print(f"      ❌ Critical Error: {e}")
 
