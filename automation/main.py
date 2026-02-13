@@ -6,6 +6,7 @@ import time
 import re
 import random
 import warnings 
+import sys
 import subprocess
 import string
 from urllib.parse import quote
@@ -14,6 +15,20 @@ from slugify import slugify
 from io import BytesIO
 from PIL import Image, ImageEnhance, ImageOps, ImageFilter, ImageDraw, ImageFont
 from groq import Groq, APIError
+
+# ==========================================
+# 🛠️ AUTO-INSTALL DEPENDENCY (ANTI-BLOCK)
+# ==========================================
+# Kita butuh 'cloudscraper' untuk tembus Cloudflare (Error 530).
+# Script ini akan otomatis menginstallnya jika belum ada.
+try:
+    import cloudscraper
+    print("✅ Cloudscraper library found.")
+except ImportError:
+    print("⚠️ Cloudscraper not found. Installing automatically to bypass Cloudflare...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "cloudscraper"])
+    import cloudscraper
+    print("✅ Cloudscraper installed successfully.")
 
 # --- SUPPRESS WARNINGS ---
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -43,17 +58,15 @@ if not GROQ_API_KEYS:
     exit(1)
 
 # ==========================================
-# 🎨 POLLINATIONS AI ENGINE (CURL BYPASS VERSION)
+# 🎨 POLLINATIONS AI ENGINE (CLOUDSCRAPER VERSION)
 # ==========================================
 
-def add_watermark(image_path):
+def add_watermark(image_data):
     """
-    Membuka gambar dari path, memberi watermark, lalu save ulang (overwrite).
+    Menerima bytes gambar, memberi watermark, mengembalikan objek Image.
     """
     try:
-        if not os.path.exists(image_path): return
-        
-        img = Image.open(image_path)
+        img = Image.open(BytesIO(image_data))
         img = img.convert("RGB")
         draw = ImageDraw.Draw(img)
         text = "@JeepDaily"
@@ -76,76 +89,71 @@ def add_watermark(image_path):
         draw.text((x+3, y+3), text, fill=(0, 0, 0, 160), font=font)
         draw.text((x, y), text, fill=(255, 255, 255, 240), font=font)
         
-        # Save overwrite as optimized WEBP
-        img.save(image_path, "WEBP", quality=90)
-        
+        return img
     except Exception as e:
         print(f"      ⚠️ Watermark error: {e}")
+        return None
 
 def generate_cartoon_image(keyword, filename):
     """
-    Menggunakan 'curl' sistem operasi untuk bypass Error 530/403.
+    Menggunakan cloudscraper untuk bypass Error 530/403 dari Cloudflare.
     """
     if not os.path.exists(IMAGE_DIR): os.makedirs(IMAGE_DIR, exist_ok=True)
     output_path = f"{IMAGE_DIR}/{filename}"
     
-    # 1. Bersihkan Keyword (Hanya alphanumeric) agar URL bersih
-    clean_keyword = re.sub(r'[^\w\s]', '', keyword).strip()
+    # 1. Bersihkan Keyword
+    clean_keyword = re.sub(r'[^\w\s\-]', '', keyword).strip()
     if len(clean_keyword) > 80: clean_keyword = clean_keyword[:80]
     
-    # 2. Prompt Style
-    prompt = f"{clean_keyword} cartoon vector art jeep offroad gta style flat color 8k"
-    encoded_prompt = quote(prompt)
+    # 2. Prompt yang lebih 'aman' untuk URL
+    prompt_suffix = "cartoon vector art jeep offroad gta style flat color 8k"
+    full_prompt = f"{clean_keyword} {prompt_suffix}"
+    encoded_prompt = quote(full_prompt)
     
     print(f"      🎨 Generating AI Image for: '{clean_keyword}'")
 
-    # 3. List Model untuk dicoba
-    # Kita coba 'flux' dulu, kalau gagal 'turbo'
+    # 3. Inisialisasi Cloudscraper (Ini kuncinya!)
+    # create_scraper akan membuat sesi yang terlihat seperti browser asli (Chrome)
+    scraper = cloudscraper.create_scraper(
+        browser={
+            'browser': 'chrome',
+            'platform': 'linux',
+            'desktop': True
+        }
+    )
+
     models = ["flux", "turbo"]
     
-    for model in models:
+    for i, model in enumerate(models):
         try:
             seed = random.randint(100, 99999999)
-            # URL Pollinations
+            # URL Pollinations Standard
             url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&seed={seed}&nologo=true&model={model}"
             
-            # --- TEKNIK CURL (BYPASS PYTHON REQUESTS) ---
-            # Kita panggil command line linux 'curl' yang lebih tahan banting
-            command = [
-                "curl", 
-                "-L",                # Follow redirects
-                "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", # User Agent Palsu
-                "--retry", "2",      # Coba ulang 2x jika putus
-                "--max-time", "60",  # Timeout 60 detik
-                "-o", output_path,   # Output ke file
-                url
-            ]
+            # Gunakan scraper.get() bukan requests.get()
+            resp = scraper.get(url, timeout=60)
             
-            # Jalankan perintah
-            result = subprocess.run(command, capture_output=True, text=True)
-            
-            # Cek apakah file berhasil didownload
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 3000:
-                # Cek header file apakah benar gambar (bukan HTML error)
-                try:
-                    img_check = Image.open(output_path)
-                    img_check.verify() # Validasi integritas gambar
-                    
-                    # Jika valid, beri watermark
-                    add_watermark(output_path)
-                    return f"/images/{filename}"
-                except Exception:
-                    print(f"      ⚠️ File downloaded but corrupted/invalid image (Model: {model})")
-                    os.remove(output_path) # Hapus file rusak
+            if resp.status_code == 200:
+                # Cek tipe konten
+                if 'image' in resp.headers.get('Content-Type', ''):
+                    # Proses Watermark
+                    img = add_watermark(resp.content)
+                    if img:
+                        img.save(output_path, "WEBP", quality=90)
+                        
+                        if os.path.exists(output_path) and os.path.getsize(output_path) > 3000:
+                            return f"/images/{filename}"
+                else:
+                    print(f"      ⚠️ Attempt {i+1}: Received non-image content (Likely HTML error page).")
             else:
-                print(f"      ⚠️ Curl failed or empty file (Model: {model})")
+                print(f"      ⚠️ Attempt {i+1}: Cloudscraper Status {resp.status_code} (Model: {model})")
                 
         except Exception as e:
-            print(f"      ❌ System Call Error: {e}")
+            print(f"      ⏳ Attempt {i+1}: Scraper Error: {e}")
             
-        time.sleep(3) # Jeda sebelum ganti model
+        time.sleep(5) # Jeda wajib
 
-    print("      ❌ Failed to generate image with all methods.")
+    print("      ❌ Failed to generate image. Using fallback logic.")
     return ""
 
 # ==========================================
@@ -289,7 +297,7 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print("🔥 JEEP ENGINE STARTED (CURL MODE ACTIVATED) 🔥")
+    print("🔥 JEEP ENGINE STARTED (CLOUDSCRAPER MODE) 🔥")
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Reading Source: {source_name}")
@@ -315,11 +323,11 @@ def main():
             try:
                 data = json.loads(raw_json)
                 
-                # 2. Image (Call CURL function)
+                # 2. Image (Generate using Cloudscraper)
                 image_keyword = data.get('main_keyword', clean_title)
                 final_img = generate_cartoon_image(image_keyword, f"{slug}.webp")
                 
-                # Jika masih kosong juga, isi string kosong biar gak error
+                # Fallback string kosong jika gagal
                 if not final_img: final_img = ""
 
                 # 3. Save
@@ -360,8 +368,8 @@ url: "/{slug}/"
                 print(f"      ✅ Successfully Published: {slug}")
                 processed += 1
                 
-                # Jeda agar IP tidak dibanned
-                time.sleep(8) 
+                # Jeda Wajib
+                time.sleep(10) 
             except Exception as e:
                 print(f"      ❌ Critical Error: {e}")
 
