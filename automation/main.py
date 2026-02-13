@@ -1,18 +1,32 @@
 import os
 import json
-import requests
+import requests # Hanya untuk RSS
 import feedparser
 import time
 import re
 import random
 import warnings 
-import string
-from urllib.parse import quote, urlencode
+import sys
+import subprocess
+from urllib.parse import quote
 from datetime import datetime
 from slugify import slugify
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from groq import Groq
+
+# ==========================================
+# 🛠️ AUTO-INSTALL: CURL_CFFI (WAJIB)
+# ==========================================
+# Ini adalah inti solusinya. Library ini meniru browser Chrome asli.
+try:
+    from curl_cffi import requests as cffi_requests
+    print("✅ Library curl_cffi ditemukan.")
+except ImportError:
+    print("⚠️ Menginstall curl_cffi untuk bypass blokir...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "curl_cffi"])
+    from curl_cffi import requests as cffi_requests
+    print("✅ Library curl_cffi berhasil diinstall.")
 
 # --- SUPPRESS WARNINGS ---
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -42,20 +56,16 @@ if not GROQ_API_KEYS:
     exit(1)
 
 # ==========================================
-# 🎨 POLLINATIONS AI ENGINE (PROXY BRIDGE MODE)
+# 🎨 POLLINATIONS AI ENGINE (REAL BROWSER SPOOFING)
 # ==========================================
 
 def add_watermark(image_bytes):
-    """
-    Memberi watermark pada gambar dari bytes, return object Image.
-    """
     try:
         img = Image.open(BytesIO(image_bytes))
         img = img.convert("RGB")
         draw = ImageDraw.Draw(img)
         text = "@JeepDaily"
         
-        # Font handling
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
         except:
@@ -69,7 +79,6 @@ def add_watermark(image_bytes):
         x = img_w - text_w - 40
         y = 40
         
-        # Shadow & Text
         draw.text((x+3, y+3), text, fill=(0, 0, 0, 160), font=font)
         draw.text((x, y), text, fill=(255, 255, 255, 240), font=font)
         
@@ -80,65 +89,70 @@ def add_watermark(image_bytes):
 
 def generate_cartoon_image(keyword, filename):
     """
-    Menggunakan 'wsrv.nl' sebagai jembatan (proxy) untuk menghindari
-    blokir IP GitHub Actions oleh Pollinations.ai.
+    Menggunakan curl_cffi dengan impersonate Chrome 120.
     """
     if not os.path.exists(IMAGE_DIR): os.makedirs(IMAGE_DIR, exist_ok=True)
     output_path = f"{IMAGE_DIR}/{filename}"
     
-    # 1. Bersihkan Keyword
     clean_keyword = re.sub(r'[^\w\s\-]', '', keyword).strip()
-    if len(clean_keyword) > 80: clean_keyword = clean_keyword[:80]
+    if len(clean_keyword) > 90: clean_keyword = clean_keyword[:90]
     
-    # 2. Siapkan URL Pollinations Asli
-    # Prompt style
-    prompt = f"{clean_keyword} cartoon vector art jeep offroad gta style flat color 8k"
+    # Prompt yang lebih spesifik untuk kartun
+    prompt = f"{clean_keyword} cartoon vector art jeep offroad style flat color 8k"
     encoded_prompt = quote(prompt)
-    seed = random.randint(100, 99999999)
     
-    # URL Pollinations Target (Jangan diakses langsung)
-    # Kita gunakan model 'flux' (bagus) atau 'turbo' (cepat)
-    pollinations_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&seed={seed}&nologo=true&model=flux"
-    
-    # 3. Gunakan PROXY BRIDGE (wsrv.nl)
-    # wsrv.nl akan mendownload gambar dari pollinations (IP mereka bersih),
-    # lalu kita download dari wsrv.nl.
-    # urlencode digunakan agar URL pollinations aman di dalam URL wsrv
-    proxy_url = f"https://wsrv.nl/?url={quote(pollinations_url)}&output=webp&q=100"
-    
-    print(f"      🎨 Generating via Proxy for: '{clean_keyword}'")
+    print(f"      🎨 Generating AI Image for: '{clean_keyword}'")
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
+    # Kita pakai model 'turbo' dulu karena 'flux' sering timeout di server gratisan
+    models_to_try = ["turbo", "flux"]
+    
+    # Session browser palsu
+    session = cffi_requests.Session()
 
-    try:
-        # Request ke Proxy, bukan ke Pollinations langsung
-        resp = requests.get(proxy_url, headers=headers, timeout=60)
-        
-        if resp.status_code == 200:
-            if 'image' in resp.headers.get('Content-Type', ''):
-                # Proses Watermark
-                img = add_watermark(resp.content)
-                if img:
-                    img.save(output_path, "WEBP", quality=90)
-                    
-                    if os.path.exists(output_path) and os.path.getsize(output_path) > 3000:
-                        return f"/images/{filename}"
-            else:
-                print("      ⚠️ Proxy returned non-image content.")
-        else:
-            print(f"      ⚠️ Proxy Bridge Failed: {resp.status_code}")
+    for model in models_to_try:
+        try:
+            seed = random.randint(100, 99999999)
+            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&seed={seed}&nologo=true&model={model}"
             
-    except Exception as e:
-        print(f"      ❌ Image Gen Error: {e}")
+            # --- THE MAGIC KEY ---
+            # impersonate="chrome120" membuat server yakin ini adalah Chrome Browser
+            resp = session.get(
+                url, 
+                impersonate="chrome120", 
+                headers={
+                    "Referer": "https://pollinations.ai/",
+                    "Origin": "https://pollinations.ai",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                },
+                timeout=60 # Timeout diperpanjang
+            )
+            
+            if resp.status_code == 200:
+                content_type = resp.headers.get('Content-Type', '')
+                if 'image' in content_type:
+                    img = add_watermark(resp.content)
+                    if img:
+                        img.save(output_path, "WEBP", quality=90)
+                        
+                        if os.path.exists(output_path) and os.path.getsize(output_path) > 3000:
+                            return f"/images/{filename}"
+                else:
+                    print(f"      ⚠️ Model '{model}' returned non-image (Type: {content_type})")
+            else:
+                print(f"      ⚠️ Model '{model}' Failed: Status {resp.status_code}")
+                
+        except Exception as e:
+            print(f"      ⏳ Model '{model}' Error: {e}")
+        
+        time.sleep(3) # Jeda antar model
 
-    # --- FALLBACK JIKA PROXY GAGAL ---
-    # Jika gagal download, kita jangan biarkan artikel tanpa gambar.
-    # Kita return URL Pollinations langsung (Hotlinking).
-    # Browser user yang akan membukanya nanti, bukan server kita.
-    print("      ⚠️ Downloading failed. Falling back to hotlink URL.")
-    return pollinations_url
+    # --- FINAL FAILSAFE ---
+    # Jika download gagal total, JANGAN biarkan kosong.
+    # Kembalikan URL Pollinations agar gambar tetap muncul (via Hotlinking di browser user).
+    # Ini lebih baik daripada tidak ada gambar sama sekali.
+    print("      ⚠️ Download failed. Using Hotlink URL as fallback.")
+    fallback_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model=turbo&nologo=true"
+    return fallback_url
 
 # ==========================================
 # ⚙️ STANDARD CONFIG
@@ -281,7 +295,7 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print("🔥 JEEP ENGINE STARTED (PROXY MODE) 🔥")
+    print("🔥 JEEP ENGINE STARTED (BROWSER SPOOFING MODE) 🔥")
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Reading Source: {source_name}")
@@ -307,13 +321,10 @@ def main():
             try:
                 data = json.loads(raw_json)
                 
-                # 2. Image (Generate using Proxy Bridge)
+                # 2. Image (Generate using curl_cffi)
                 image_keyword = data.get('main_keyword', clean_title)
                 final_img = generate_cartoon_image(image_keyword, f"{slug}.webp")
                 
-                # Fallback: Pastikan string valid
-                if not final_img: final_img = ""
-
                 # 3. Save
                 clean_body = clean_ai_content(data['content_body'])
                 links_md = get_internal_links_markdown()
@@ -352,8 +363,8 @@ url: "/{slug}/"
                 print(f"      ✅ Successfully Published: {slug}")
                 processed += 1
                 
-                # Jeda Wajib
-                time.sleep(8) 
+                # Jeda wajib
+                time.sleep(10) 
             except Exception as e:
                 print(f"      ❌ Critical Error: {e}")
 
