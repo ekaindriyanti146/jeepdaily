@@ -1,4 +1,4 @@
-name: Auto Post tech News
+name: Auto Post Jeep Daily
 
 on:
   schedule:
