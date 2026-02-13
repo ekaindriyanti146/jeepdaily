@@ -6,10 +6,13 @@ import time
 import re
 import random
 import warnings 
+import string
+from urllib.parse import quote
 from datetime import datetime
 from slugify import slugify
 from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageEnhance, ImageOps, ImageFilter, ImageDraw, ImageFont
+from groq import Groq, APIError
 
 # --- SUPPRESS WARNINGS ---
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -21,213 +24,149 @@ try:
     GOOGLE_LIBS_AVAILABLE = True
 except ImportError:
     GOOGLE_LIBS_AVAILABLE = False
+    print("⚠️ Google Indexing Libs not found (Skipping).")
 
 # ==========================================
-# ⚙️ KONFIGURASI ENDPOINT (STRICT)
+# ⚙️ CONFIGURATION & SETUP
 # ==========================================
 
-# Endpoint WAJIB (Sesuai instruksi Anda)
-GROK_API_URL = "https://velmamore-grok-api-free.hf.space/v1/chat/completions"
+GROQ_KEYS_RAW = os.environ.get("GROQ_API_KEY", "") 
+GROQ_API_KEYS = [k.strip() for k in GROQ_KEYS_RAW.split(",") if k.strip()]
 
-# API Key (Default 'admin' sesuai dokumentasi jika belum diubah)
-GROK_API_KEY = os.environ.get("GROK_API_KEY", "admin") 
-
-# Konfigurasi Website
 WEBSITE_URL = "https://dother.biz.id" 
 INDEXNOW_KEY = "e74819b68a0f40e98f6ec3dc24f610f0" 
 GOOGLE_JSON_KEY = os.environ.get("GOOGLE_INDEXING_KEY", "") 
 
-# Folder Output
+if not GROQ_API_KEYS:
+    print("❌ FATAL ERROR: Groq API Key is missing!")
+    exit(1)
+
+# ==========================================
+# 🎨 POLLINATIONS AI ENGINE (CARTOON/VECTOR STYLE)
+# ==========================================
+
+def add_watermark(img):
+    """Menambahkan watermark @JeepDaily dengan shadow agar terbaca jelas"""
+    try:
+        img = img.convert("RGB")
+        draw = ImageDraw.Draw(img)
+        text = "@JeepDaily"
+        
+        # Coba load font tebal, fallback ke default
+        try:
+            # Path font umum di server Linux/Ubuntu
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
+        except:
+            font = ImageFont.load_default()
+            
+        # Posisi Kanan Atas (Margin 40px)
+        img_w, img_h = img.size
+        text_bbox = draw.textbbox((0, 0), text, font=font)
+        text_w = text_bbox[2] - text_bbox[0]
+        text_h = text_bbox[3] - text_bbox[1]
+        
+        x = img_w - text_w - 40
+        y = 40
+        
+        # Shadow Effect (Hitam Transparan)
+        draw.text((x+3, y+3), text, fill=(0, 0, 0, 160), font=font)
+        # Main Text (Putih Terang)
+        draw.text((x, y), text, fill=(255, 255, 255, 240), font=font)
+        
+        return img
+    except Exception as e:
+        print(f"      ⚠️ Watermark error: {e}")
+        return img
+
+def generate_cartoon_image(keyword, filename):
+    """
+    Generate gambar unik via Pollinations.ai dengan style Kartun/Vektor.
+    """
+    if not os.path.exists(IMAGE_DIR): os.makedirs(IMAGE_DIR, exist_ok=True)
+    output_path = f"{IMAGE_DIR}/{filename}"
+    
+    # Bersihkan keyword
+    clean_keyword = keyword.replace('"', '').replace("'", "").strip()
+    
+    # Random Seed = Kunci keunikan gambar (biar ga pernah sama)
+    seed = random.randint(1, 999999999)
+    
+    # Prompt Engineering Khusus:
+    # Memaksa gaya "Vector Art" / "GTA Loading Screen Style" yang keren buat blog otomotif
+    prompt = (
+        f"detailed vector art illustration of {clean_keyword}, jeep wrangler rubicon offroad action, "
+        f"dynamic angle, vibrant colors, flat shading, grand theft auto loading screen style, "
+        f"highly detailed, 8k resolution, cinematic lighting, masterpiece"
+    )
+    
+    encoded_prompt = quote(prompt)
+    
+    # URL Pollinations
+    image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&seed={seed}&nologo=true&model=flux"
+    
+    print(f"      🎨 Generating AI Art: '{clean_keyword}'")
+    
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    # Retry Logic (3x Percobaan)
+    for attempt in range(3):
+        try:
+            resp = requests.get(image_url, headers=headers, timeout=40)
+            if resp.status_code == 200:
+                img = Image.open(BytesIO(resp.content))
+                
+                # Tambah Watermark
+                img = add_watermark(img)
+                
+                # Simpan (High Quality WebP)
+                img.save(output_path, "WEBP", quality=92)
+                
+                # Validasi Ukuran File (Minimal 5KB)
+                if os.path.exists(output_path) and os.path.getsize(output_path) > 5000:
+                    return f"/images/{filename}"
+            else:
+                print(f"      ⚠️ Pollinations status: {resp.status_code}")
+                time.sleep(2)
+        except Exception as e:
+            print(f"      ❌ Image Gen Failed ({attempt+1}/3): {e}")
+            time.sleep(2)
+
+    # Fallback (Jangan sampai postingan gagal gara-gara gambar)
+    return "/images/default-jeep.webp"
+
+# ==========================================
+# ⚙️ STANDARD CONFIG
+# ==========================================
+
+AUTHOR_PROFILES = [
+    "Rick 'Muddy' O'Connell (Off-road Expert)", 
+    "Sarah Miller (Automotive Historian)",
+    "Mike Stevens (Jeep Mechanic)", 
+    "Tom Davidson (4x4 Reviewer)",
+    "Elena Forza (Car Design Analyst)"
+]
+
+VALID_CATEGORIES = [
+    "Wrangler Life", "Classic Jeeps", "Grand Cherokee", 
+    "Gladiator Truck", "Off-road Tips", "Jeep History", "Maintenance & Mods"
+]
+
+RSS_SOURCES = {
+    "Jeep Wrangler News": "https://news.google.com/rss/search?q=Jeep+Wrangler+Review+OR+News&hl=en-US&gl=US&ceid=US:en",
+    "Jeep Gladiator": "https://news.google.com/rss/search?q=Jeep+Gladiator+News&hl=en-US&gl=US&ceid=US:en",
+    "Classic Jeep History": "https://news.google.com/rss/search?q=Classic+Jeep+Willys+History&hl=en-US&gl=US&ceid=US:en",
+    "Offroad Lifestyle": "https://news.google.com/rss/search?q=Offroad+4x4+Adventure&hl=en-US&gl=US&ceid=US:en"
+}
+
 CONTENT_DIR = "content/articles" 
 IMAGE_DIR = "static/images"
 DATA_DIR = "automation/data"
 MEMORY_FILE = f"{DATA_DIR}/link_memory.json"
 TARGET_PER_SOURCE = 1 
 
-# Profil Penulis
-AUTHOR_PROFILES = [
-    "Rick 'Muddy' O'Connell (Off-road Expert)", 
-    "Sarah Miller (Automotive Historian)",
-    "Mike Stevens (Jeep Mechanic)", 
-    "Tom Davidson (4x4 Reviewer)"
-]
-
-# Sumber RSS (Jeep Niche)
-RSS_SOURCES = {
-    "Wrangler Life": "https://news.google.com/rss/search?q=Jeep+Wrangler+Review&hl=en-US&gl=US&ceid=US:en",
-    "Offroad Tips": "https://news.google.com/rss/search?q=Offroad+4x4+Tips&hl=en-US&gl=US&ceid=US:en",
-    "Jeep Mods": "https://news.google.com/rss/search?q=Jeep+Modifications&hl=en-US&gl=US&ceid=US:en"
-}
-
 # ==========================================
-# 🔌 FUNGSI KONEKSI KE ENDPOINT (CORE)
+# 🧠 HELPER FUNCTIONS
 # ==========================================
-
-def get_random_header():
-    """Mengacak User-Agent untuk menghindari blokir IP sederhana"""
-    user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/119.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (X11; Linux x86_64) Chrome/110.0.0.0 Safari/537.36"
-    ]
-    return {
-        "Authorization": f"Bearer {GROK_API_KEY}",
-        "Content-Type": "application/json",
-        "User-Agent": random.choice(user_agents)
-    }
-
-def call_grok_endpoint(messages, model="grok-4.1"):
-    """
-    Fungsi tunggal untuk memanggil endpoint velmamore-grok-api-free.hf.space
-    Digunakan untuk ARTIKEL dan GAMBAR.
-    """
-    payload = {
-        "model": model, # grok-4.1 mendukung text & image generation
-        "messages": messages,
-        "stream": False
-    }
-    
-    # Retry Logic jika server sibuk (429/503)
-    for attempt in range(3):
-        try:
-            # Timeout panjang (120s) karena generate gambar/artikel butuh waktu
-            response = requests.post(GROK_API_URL, headers=get_random_header(), json=payload, timeout=120)
-            
-            if response.status_code == 200:
-                return response.json()
-            elif response.status_code in [429, 500, 502, 503]:
-                print(f"      ⚠️ Server Busy ({response.status_code}). Retrying in 10s...")
-                time.sleep(10)
-                continue
-            elif response.status_code == 403:
-                print("      ❌ Error 403: IP Blocked by Cloudflare/HuggingFace.")
-                return None
-            else:
-                print(f"      ❌ API Error: {response.status_code} - {response.text[:100]}")
-                return None
-        except Exception as e:
-            print(f"      ⚠️ Connection Error: {e}")
-            time.sleep(5)
-            
-    return None
-
-# ==========================================
-# 🖼️ FUNGSI GENERATE IMAGE (VIA ENDPOINT)
-# ==========================================
-
-def generate_image_from_endpoint(keyword, filename):
-    """
-    Meminta endpoint Grok untuk menggambar ('Draw...')
-    Response dari endpoint ini akan berisi URL gambar.
-    """
-    output_path = f"{IMAGE_DIR}/{filename}"
-    
-    # Instruksi spesifik untuk memicu fitur Image Gen di Grok
-    prompt = f"Draw a high quality vector art illustration of {keyword}, Jeep Wrangler offroad style, vibrant colors, 4k resolution."
-    
-    print(f"      🎨 Requesting Image from Endpoint: '{keyword}'")
-    
-    messages = [{"role": "user", "content": prompt}]
-    
-    # Panggil Endpoint
-    response = call_grok_endpoint(messages, model="grok-4.1")
-    
-    if response and 'choices' in response:
-        content = response['choices'][0]['message']['content']
-        
-        # Endpoint Grok biasanya mengembalikan markdown image: ![image](https://...)
-        # Kita ekstrak URL-nya menggunakan Regex
-        urls = re.findall(r'(https?://[^\s)]+)', content)
-        
-        image_url = None
-        # Cari URL yang valid (biasanya di domain hf.space atau sejenisnya)
-        for url in urls:
-            clean_url = url.split(')')[0].split('"')[0]
-            # Validasi ekstensi gambar umum
-            if any(ext in clean_url.lower() for ext in ['.png', '.jpg', '.jpeg', '.webp', 'generated']):
-                image_url = clean_url
-                break
-        
-        # Jika ketemu URL gambar dari response endpoint
-        if image_url:
-            try:
-                print(f"      ⬇️ Downloading generated image...")
-                img_resp = requests.get(image_url, timeout=30)
-                if img_resp.status_code == 200:
-                    img = Image.open(BytesIO(img_resp.content)).convert("RGB")
-                    
-                    # Tambah Watermark @JeepDaily
-                    draw = ImageDraw.Draw(img)
-                    try:
-                        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
-                    except:
-                        font = ImageFont.load_default()
-                    draw.text((20, 20), "@JeepDaily", fill=(255, 255, 255), font=font)
-                    
-                    # Simpan
-                    img.save(output_path, "WEBP", quality=90)
-                    print("      ✅ Image Saved Successfully!")
-                    return f"/images/{filename}"
-            except Exception as e:
-                print(f"      ❌ Failed to download image from endpoint: {e}")
-        else:
-            print("      ⚠️ Endpoint responded but no Image URL found in content.")
-            # Debug: print konten jika gagal
-            # print(f"DEBUG CONTENT: {content[:100]}...")
-    else:
-        print("      ❌ Failed to get response from Image Endpoint.")
-
-    return "" # Return kosong jika gagal (sesuai instruksi tidak boleh pakai fallback lain)
-
-# ==========================================
-# 📝 FUNGSI GENERATE ARTIKEL (VIA ENDPOINT)
-# ==========================================
-
-def generate_article_from_endpoint(title, summary, link, author):
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    
-    system_prompt = f"""
-    You are {author}, a Jeep Specialist. Date: {current_date}.
-    Write a 1000-word SEO article using MARKDOWN.
-    OUTPUT MUST BE A VALID JSON OBJECT ONLY.
-    Structure: {{ "title": "...", "description": "...", "category": "...", "main_keyword": "...", "tags": [], "content_body": "..." }}
-    """
-    
-    user_prompt = f"Topic: {title}\nSummary: {summary}\nLink: {link}"
-    
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt}
-    ]
-    
-    print(f"      🤖 Requesting Article from Endpoint...")
-    response = call_grok_endpoint(messages, model="grok-4.1")
-    
-    if response and 'choices' in response:
-        content = response['choices'][0]['message']['content']
-        
-        # Bersihkan markdown code block ```json ... ```
-        content = re.sub(r'^```[a-zA-Z]*\n', '', content)
-        content = re.sub(r'\n```$', '', content).replace("```", "").strip()
-        
-        try:
-            # Cari kurung kurawal JSON
-            match = re.search(r'\{.*\}', content, re.DOTALL)
-            if match:
-                return json.loads(match.group(0))
-            else:
-                # Jika response bukan JSON murni, coba parse paksa
-                return json.loads(content)
-        except Exception as e:
-            print(f"      ❌ JSON Parsing Failed: {e}")
-            return None
-            
-    return None
-
-# ==========================================
-# 🧠 HELPER LAINNYA
-# ==========================================
-
 def load_link_memory():
     if not os.path.exists(MEMORY_FILE): return {}
     try:
@@ -238,44 +177,126 @@ def save_link_to_memory(title, slug):
     os.makedirs(DATA_DIR, exist_ok=True)
     memory = load_link_memory()
     memory[title] = f"/articles/{slug}" 
+    if len(memory) > 300: memory = dict(list(memory.items())[-300:])
     with open(MEMORY_FILE, 'w') as f: json.dump(memory, f, indent=2)
 
 def get_internal_links_markdown():
     memory = load_link_memory()
-    if not memory: return ""
     items = list(memory.items())
-    selected = random.sample(items, min(len(items), 3))
-    return "\n".join([f"- [{title}]({url})" for title, url in selected])
+    if not items: return ""
+    count = min(4, len(items))
+    selected_items = random.sample(items, count)
+    return "\n".join([f"- [{title}]({url})" for title, url in selected_items])
 
 def fetch_rss_feed(url):
+    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
+        response = requests.get(url, headers=headers, timeout=20)
         return feedparser.parse(response.content) if response.status_code == 200 else None
     except: return None
 
+def clean_ai_content(text):
+    if not text: return ""
+    # Hapus wrapper markdown ``` yang sering dikasih AI
+    text = re.sub(r'^```[a-zA-Z]*\n', '', text)
+    text = re.sub(r'\n```$', '', text)
+    text = text.replace("```", "")
+    return text.strip()
+
 # ==========================================
-# 🏁 MAIN PROGRAM
+# 🚀 INDEXING LOGS
+# ==========================================
+def submit_to_indexnow(url):
+    try:
+        endpoint = "https://api.indexnow.org/indexnow"
+        host = WEBSITE_URL.replace("https://", "").replace("http://", "")
+        data = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"https://{host}/{INDEXNOW_KEY}.txt", "urlList": [url]}
+        requests.post(endpoint, json=data, headers={'Content-Type': 'application/json; charset=utf-8'}, timeout=5)
+        print(f"      🚀 IndexNow Log: Submitted {url}")
+    except: pass
+
+def submit_to_google(url):
+    if not GOOGLE_JSON_KEY or not GOOGLE_LIBS_AVAILABLE: return
+    try:
+        creds_dict = json.loads(GOOGLE_JSON_KEY)
+        SCOPES = ["https://www.googleapis.com/auth/indexing"]
+        credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPES)
+        service = build("indexing", "v3", credentials=credentials)
+        body = {"url": url, "type": "URL_UPDATED"}
+        service.urlNotifications().publish(body=body).execute()
+        print(f"      🚀 Google Log: Submitted {url}")
+    except: pass
+
+# ==========================================
+# 🧠 CONTENT ENGINE (SEO EXPERT MODE - H2/H3/H4)
 # ==========================================
 
+def get_groq_article_json(title, summary, link, author_name):
+    # PROMPT PREMIUM: Memaksa struktur SEO yang benar
+    system_prompt = f"""
+    You are {author_name}, a Senior Automotive Journalist & SEO Specialist.
+    
+    TASK: Write a comprehensive, highly structured blog post (1000+ words).
+    
+    ### 1. STRUCTURE RULES (STRICT):
+    - **H1 (Title):** Already provided, do not repeat in body.
+    - **Introduction:** Hook the reader immediately. NO label "Introduction".
+    - **H2 (##):** Use at least 3-4 Main Headings for major topics.
+    - **H3 (###):** Use Sub-headings under H2 to break down complex ideas.
+    - **H4 (####):** Use for very specific technical details (e.g., "3.6L Pentastar V6 Specs").
+    - **Tables:** You MUST include a Markdown Table for specs, pros/cons, or comparisons.
+    - **Lists:** Use bullet points for features.
+    
+    ### 2. STYLE RULES:
+    - **Tone:** Authoritative, technical, yet accessible. 
+    - **Forbidden Words:** Do NOT use "In conclusion", "Overall", "Let's dive in", "Unleashing", "A tapestry of".
+    - **Perspective:** Write from experience (e.g., "When on the trail...").
+    
+    ### 3. SEO RULES:
+    - **Keywords:** Naturally weave the main topic into H2s and H3s.
+    - **Image Prompt:** Provide a specific 'main_keyword' for the AI image generator (e.g. "Green Jeep Wrangler Rubicon climbing rocky hill cartoon style").
+    
+    ### 4. OUTPUT FORMAT:
+    Return valid JSON with keys: 
+    - "title" (SEO optimized)
+    - "description" (Meta description, max 160 chars)
+    - "category" (Pick one: Wrangler Life, Classic Jeeps, Gladiator Truck, Off-road Tips)
+    - "main_keyword" (For image generation)
+    - "tags" (Array of strings)
+    - "content_body" (The full article in Markdown)
+    """
+    
+    user_prompt = f"Topic: {title}\nSummary context: {summary}\nSource Link: {link}"
+    
+    for api_key in GROQ_API_KEYS:
+        client = Groq(api_key=api_key)
+        try:
+            print(f"      🤖 AI Writing ({author_name})...")
+            completion = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                temperature=0.6, # Agak rendah agar struktur konsisten
+                max_tokens=7000,
+                response_format={"type": "json_object"}
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            print(f"      ⚠️ AI Gen Error: {e}")
+            continue
+    return None
+
+# ==========================================
+# 🏁 MAIN WORKFLOW
+# ==========================================
 def main():
-    # Persiapan Folder
     os.makedirs(CONTENT_DIR, exist_ok=True)
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print(f"🔥 ENGINE STARTED: STRICT ENDPOINT MODE ({GROK_API_URL}) 🔥")
-    
-    # Cek Koneksi Awal
-    try:
-        print("      🔍 Checking Endpoint Connection...")
-        # Ping root domain untuk memastikan server hidup
-        requests.get("https://velmamore-grok-api-free.hf.space", timeout=10)
-        print("      ✅ Server is Reachable.")
-    except Exception as e:
-        print(f"      ⚠️ Server Warning: {e}")
+    print("🔥 JEEP ENGINE STARTED (SEO MODE + POLLINATIONS CARTOON) 🔥")
 
     for source_name, rss_url in RSS_SOURCES.items():
-        print(f"\n📡 RSS Source: {source_name}")
+        print(f"\n📡 Reading Source: {source_name}")
         feed = fetch_rss_feed(rss_url)
         if not feed: continue
 
@@ -284,75 +305,68 @@ def main():
             if processed >= TARGET_PER_SOURCE: break
             
             clean_title = entry.title.split(" - ")[0]
-            slug = slugify(clean_title, max_length=60)
+            slug = slugify(clean_title, max_length=50, word_boundary=True)
             filename = f"{slug}.md"
             
             if os.path.exists(f"{CONTENT_DIR}/{filename}"): continue
             
-            print(f"   ⚡ Processing: {clean_title[:30]}...")
-            
             author = random.choice(AUTHOR_PROFILES)
             
-            # 1. GENERATE ARTIKEL VIA ENDPOINT
-            data = generate_article_from_endpoint(clean_title, entry.summary, entry.link, author)
+            # 1. Generate Content (JSON)
+            raw_json = get_groq_article_json(clean_title, entry.summary, entry.link, author)
+            if not raw_json: continue
             
-            if not data:
-                print("      ❌ Failed to generate article. Skipping.")
-                time.sleep(5)
-                continue
-
-            # 2. GENERATE GAMBAR VIA ENDPOINT
-            keyword = data.get('main_keyword') or clean_title
-            final_img = generate_image_from_endpoint(keyword, f"{slug}.webp")
-            
-            if not final_img:
-                print("      ⚠️ Image generation failed/empty from endpoint.")
-                # Sesuai instruksi, jika gagal ya gagal (tidak ada fallback ke unsplash)
-            
-            # 3. SAVE FILE
-            md_body = data.get('content_body', '')
-            cat = data.get('category', 'Wrangler Life')
-            links_md = get_internal_links_markdown()
-            
-            md_content = f"""---
-title: "{data.get('title', clean_title).replace('"', "'")}"
+            try:
+                data = json.loads(raw_json)
+                
+                # 2. Generate Image (POLLINATIONS AI)
+                # Menggunakan keyword visual dari AI agar gambar 100% relevan
+                # Default ke title jika AI lupa ngasih keyword
+                image_keyword = data.get('main_keyword', clean_title)
+                final_img = generate_cartoon_image(image_keyword, f"{slug}.webp")
+                
+                # 3. Assemble Markdown
+                clean_body = clean_ai_content(data['content_body'])
+                links_md = get_internal_links_markdown()
+                final_body = clean_body + "\n\n### Explore More\n" + links_md
+                
+                cat = data.get('category', "Wrangler Life")
+                if cat not in VALID_CATEGORIES: cat = "Wrangler Life"
+                
+                md_content = f"""---
+title: "{data['title'].replace('"', "'")}"
 date: {datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00")}
 author: "{author}"
 categories: ["{cat}"]
 tags: {json.dumps(data.get('tags', []))}
 featured_image: "{final_img}"
-description: "{data.get('description', '').replace('"', "'")}"
+description: "{data['description'].replace('"', "'")}"
 slug: "{slug}"
 url: "/{slug}/"
 ---
 
-{md_body}
+{final_body}
 
-### Explore More
-{links_md}
+---
+*Reference: Automotive analysis by {author} based on news from [{source_name}]({entry.link}).*
 """
-            with open(f"{CONTENT_DIR}/{filename}", "w", encoding="utf-8") as f:
-                f.write(md_content)
-            
-            save_link_to_memory(data.get('title', clean_title), slug)
-            
-            # 4. INDEXING
-            full_url = f"{WEBSITE_URL}/{slug}/"
-            try:
-                requests.post("https://api.indexnow.org/indexnow", json={
-                    "host": WEBSITE_URL.replace("https://", ""),
-                    "key": INDEXNOW_KEY,
-                    "urlList": [full_url]
-                }, timeout=5)
-                print("      🚀 IndexNow Submitted")
-            except: pass
+                with open(f"{CONTENT_DIR}/{filename}", "w", encoding="utf-8") as f:
+                    f.write(md_content)
+                
+                save_link_to_memory(data['title'], slug)
+                
+                # Indexing
+                full_url = f"{WEBSITE_URL}/{slug}/"
+                submit_to_indexnow(full_url)
+                submit_to_google(full_url)
 
-            print(f"      ✅ Published: {slug}")
-            processed += 1
-            
-            # Jeda untuk menghindari Rate Limit
-            print("      💤 Cooling down (20s)...")
-            time.sleep(20)
+                print(f"      ✅ Successfully Published: {slug}")
+                processed += 1
+                
+                # Jeda wajib agar Pollinations tidak reject request kita
+                time.sleep(6) 
+            except Exception as e:
+                print(f"      ❌ Critical Error: {e}")
 
 if __name__ == "__main__":
     main()
