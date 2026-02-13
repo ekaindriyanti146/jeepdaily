@@ -10,7 +10,7 @@ import string
 from datetime import datetime
 from slugify import slugify
 from io import BytesIO
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageOps, ImageFilter
 
 # --- SUPPRESS WARNINGS ---
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -22,31 +22,35 @@ try:
     GOOGLE_LIBS_AVAILABLE = True
 except ImportError:
     GOOGLE_LIBS_AVAILABLE = False
-    print("⚠️ Google Indexing Libs not found.")
 
 # ==========================================
 # ⚙️ CONFIGURATION & SETUP
 # ==========================================
 
-# Endpoint dari server Hugging Face yang Anda berikan
-GROK_GATEWAY_URL = "https://velmamore-grok-api-free.hf.space/v1/chat/completions"
-# API Key yang diatur di Admin Panel server tersebut
-GROK_API_KEY = os.environ.get("GROK_API_KEY", "your-admin-api-key") 
+# ⚠️ URL INI SANGAT PENTING. JANGAN UBAH FORMATNYA.
+# Format yang benar untuk Direct API Hugging Face Space adalah:
+# https://{username}-{spacename}.hf.space/v1/chat/completions
+GROK_API_URL = "https://velmamore-grok-api-free.hf.space/v1/chat/completions"
+
+# API Key Admin (Sesuai settingan di Admin Panel server Anda)
+GROK_API_KEY = os.environ.get("GROK_API_KEY", "admin") 
 
 WEBSITE_URL = "https://beastion.biz.id" 
 INDEXNOW_KEY = "e74819b68a0f40e98f6ec3dc24f610f0" 
 GOOGLE_JSON_KEY = os.environ.get("GOOGLE_INDEXING_KEY", "") 
 
+# TIM PENULIS
 AUTHOR_PROFILES = [
     "Dave Harsya (Tactical Analyst)", "Sarah Jenkins (Senior Editor)",
-    "Luca Romano (Market Expert)", "Marcus Reynolds (League Correspondent)"
+    "Luca Romano (Market Expert)", "Marcus Reynolds (League Correspondent)",
+    "Ben Foster (Data Journalist)"
 ]
-
-VALID_CATEGORIES = ["Transfer News", "Premier League", "Champions League", "La Liga", "International"]
 
 RSS_SOURCES = {
     "SkySports": "https://www.skysports.com/rss/12040",
-    "BBC Football": "https://feeds.bbci.co.uk/sport/football/rss.xml"
+    "BBC Football": "https://feeds.bbci.co.uk/sport/football/rss.xml",
+    "ESPN FC": "https://www.espn.com/espn/rss/soccer/news",
+    "The Guardian": "https://www.theguardian.com/football/rss"
 }
 
 CONTENT_DIR = "content/articles" 
@@ -81,14 +85,27 @@ def clean_ai_content(text):
     if not text: return ""
     text = re.sub(r'^```[a-zA-Z]*\n', '', text)
     text = re.sub(r'\n```$', '', text)
+    text = text.replace("```", "")
     return text.strip()
 
 # ==========================================
-# 🤖 GROK GATEWAY CLIENT (CORE)
+# 🤖 GROK GATEWAY CLIENT (ROBUST VERSION)
 # ==========================================
 
+def check_server_health():
+    """Mengecek apakah Server Hugging Face Hidup/Bangun"""
+    print("      🔍 Checking Grok Server status...")
+    try:
+        # Ping root domain untuk membangunkan space
+        root_url = "https://velmamore-grok-api-free.hf.space"
+        requests.get(root_url, timeout=5)
+    except:
+        pass # Ignore error on ping, just try to wake it up
+
 def call_grok_gateway(messages, model="grok-4.1"):
-    """Memanggil endpoint tunggal /v1/chat/completions sesuai dokumentasi Grok Gateway"""
+    """
+    Memanggil API dengan penanganan Error HTML (404/502/503) yang lebih baik.
+    """
     headers = {
         "Authorization": f"Bearer {GROK_API_KEY}",
         "Content-Type": "application/json"
@@ -98,58 +115,71 @@ def call_grok_gateway(messages, model="grok-4.1"):
         "messages": messages,
         "stream": False
     }
+    
     try:
-        response = requests.post(GROK_GATEWAY_URL, headers=headers, json=payload, timeout=120)
+        response = requests.post(GROK_API_URL, headers=headers, json=payload, timeout=120)
+        
+        # Cek jika responsenya HTML (Tanda Server Error / Salah URL)
+        content_type = response.headers.get('Content-Type', '')
+        if 'text/html' in content_type:
+            print(f"      ❌ SERVER ERROR: Hugging Face Space is returning HTML (404/500).")
+            print(f"      👉 Penyebab: Server sedang 'Building', 'Sleeping', atau URL salah.")
+            return None
+
         if response.status_code == 200:
             return response.json()
         else:
-            print(f"      ⚠️ API Error {response.status_code}: {response.text}")
+            print(f"      ⚠️ API Error {response.status_code}: {response.text[:200]}")
             return None
+            
     except Exception as e:
-        print(f"      ⚠️ Connection Error: {e}")
+        print(f"      ⚠️ Connection Exception: {e}")
         return None
 
 # ==========================================
-# 🎨 IMAGE GENERATION (Sesuai Cara Kerja Gateway)
+# 🎨 IMAGE GENERATION
 # ==========================================
 
 def generate_image_grok(keyword, filename):
-    """Memicu generate image dengan instruksi 'Draw' di chat completions"""
     output_path = f"{IMAGE_DIR}/{filename}"
     
-    # Instruksi spesifik 'Draw' sesuai fitur Gateway untuk memicu FLUX model
-    prompt = f"Draw a realistic cinematic sports photography of {keyword}. High resolution, action shot."
+    # Prompt khusus untuk trigger Image Gen di Grok Gateway
+    prompt = f"Draw a realistic high-quality sports photo of {keyword}. Action shot, 4k resolution."
     
-    messages = [{"role": "user", "content": prompt}]
+    print(f"      🎨 Requesting Image: {keyword}")
     
-    print(f"      🎨 Triggering Grok Image Gen for: {keyword}")
-    # Menggunakan model grok-4.1 yang mendukung image generation
-    response = call_grok_gateway(messages, model="grok-4.1")
+    # Gunakan model grok-4.1 (Support Image)
+    response = call_grok_gateway([{"role": "user", "content": prompt}], model="grok-4.1")
     
     if response and 'choices' in response:
         content = response['choices'][0]['message']['content']
-        # Gateway biasanya mengembalikan URL gambar di dalam teks atau format khusus
-        urls = re.findall(r'(https?://[^\s)]+)', content)
         
+        # Ekstrak URL gambar dari markdown/text
+        urls = re.findall(r'(https?://[^\s)]+)', content)
         image_url = None
+        
+        # Cari URL yang valid
         for url in urls:
-            if any(ext in url.lower() for ext in ['.png', '.jpg', '.jpeg', '.webp', 'generated']):
-                image_url = url.split(')')[0] # Bersihkan jika dalam format markdown
+            clean_url = url.split(')')[0].strip('."')
+            if any(x in clean_url for x in ['generated', 'blob', 'png', 'jpg', 'webp']):
+                image_url = clean_url
                 break
         
-        if not image_url and urls: image_url = urls[0].split(')')[0]
-
+        # Download jika URL ketemu
         if image_url:
             try:
+                print(f"      ⬇️ Downloading: {image_url[:40]}...")
                 img_resp = requests.get(image_url, timeout=30)
                 if img_resp.status_code == 200:
                     img = Image.open(BytesIO(img_resp.content)).convert("RGB")
                     img = img.resize((1200, 675), Image.Resampling.LANCZOS)
                     img.save(output_path, "WEBP", quality=85)
                     return f"/images/{filename}"
-            except: pass
-            
-    print("      ⚠️ Image Gen Failed, returning Unsplash fallback.")
+            except Exception as e:
+                print(f"      ⚠️ Download Failed: {e}")
+
+    # Fallback Unsplash
+    print("      ⚠️ Grok Image Failed. Using Fallback.")
     return "https://images.unsplash.com/photo-1522778119026-d647f0565c6a?auto=format&fit=crop&w=1200&q=80"
 
 # ==========================================
@@ -157,27 +187,36 @@ def generate_image_grok(keyword, filename):
 # ==========================================
 
 def generate_article_grok(title, summary, link, author_name):
-    system_prompt = f"You are {author_name}, a sports journalist. Write a 1000-word markdown article. Return ONLY a JSON object with keys: title, description, category, main_keyword, tags, content_body."
-    user_prompt = f"Source: {title}. Summary: {summary}. Source Link: {link}."
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    
+    system_prompt = f"""
+    You are {author_name}, a sports journalist. Date: {current_date}.
+    Write a 800-word analysis article in MARKDOWN format.
+    Return ONLY a JSON object with keys: title, description, category, main_keyword, tags, content_body.
+    """
+    
+    user_prompt = f"News: {title}\nSummary: {summary}\nLink: {link}"
     
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt}
     ]
     
-    print(f"      🤖 Grok Writing Article...")
-    # Menggunakan grok-4-fast untuk kecepatan penulisan artikel
+    print(f"      🤖 Grok Writing...")
+    # Gunakan grok-4-fast untuk artikel
     response = call_grok_gateway(messages, model="grok-4-fast")
     
     if response and 'choices' in response:
         content = response['choices'][0]['message']['content']
         content = clean_ai_content(content)
-        # Mencoba mengekstrak JSON dari teks jika ada teks tambahan
+        
+        # Ekstrak JSON paksa (in case ada teks pembuka)
         try:
-            json_match = re.search(r'\{.*\}', content, re.DOTALL)
-            if json_match: return json_match.group(0)
-        except: pass
-        return content
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match: return match.group(0)
+            return content 
+        except: return content
+        
     return None
 
 # ==========================================
@@ -188,7 +227,10 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print(f"🔥 ENGINE STARTED: GROK GATEWAY MODE")
+    print(f"🔥 ENGINE STARTED: GROK GATEWAY")
+    
+    # 1. Cek Server Dulu!
+    check_server_health()
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 RSS Source: {source_name}")
@@ -205,27 +247,35 @@ def main():
             
             if os.path.exists(f"{CONTENT_DIR}/{filename}"): continue
             
-            # 1. Generate Teks
+            print(f"   ⚡ Processing: {clean_title[:30]}...")
+            
+            # GENERATE ARTIKEL
             author = random.choice(AUTHOR_PROFILES)
             raw_json = generate_article_grok(clean_title, entry.summary, entry.link, author)
             
-            if not raw_json: continue
+            if not raw_json: 
+                print("      ❌ Failed to get content response.")
+                continue
+
             try:
                 data = json.loads(raw_json)
-            except: continue
+            except:
+                print("      ❌ JSON Parsing Error.")
+                continue
 
-            # 2. Generate Gambar (PENTING: Gunakan model grok-4.1)
+            # GENERATE GAMBAR
             keyword = data.get('main_keyword') or clean_title
             final_img = generate_image_grok(keyword, f"{slug}.webp")
             
-            # 3. Save Markdown
+            # SAVE MARKDOWN
             md_body = clean_ai_content(data['content_body'])
+            cat = data.get('category', 'International')
             
             md_content = f"""---
 title: "{data['title'].replace('"', "'")}"
 date: {datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00")}
 author: "{author}"
-categories: ["{data.get('category', 'International')}"]
+categories: ["{cat}"]
 tags: {json.dumps(data.get('tags', []))}
 featured_image: "{final_img}"
 description: "{data['description'].replace('"', "'")}"
@@ -239,6 +289,11 @@ url: "/{slug}/"
                 f.write(md_content)
             
             save_link_to_memory(data['title'], slug)
+            
+            # Submit Indexing
+            full_url = f"{WEBSITE_URL}/articles/{slug}/"
+            # (Fungsi submit indexnow/google ada di blok import awal jika diperlukan)
+            
             print(f"      ✅ Published: {slug}")
             processed += 1
             time.sleep(5)
