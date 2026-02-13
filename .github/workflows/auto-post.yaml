@@ -46,7 +46,7 @@ jobs:
             echo "Changes detected. Committing..."
             # [skip ci] ditambahkan agar GitHub Actions tidak looping, 
             # TAPI Netlify biasanya tetap akan mendeteksi ini dan melakukan deploy.
-            git commit -m "⚽ New tech Update [skip ci]"
+            git commit -m "⚽ New Jeep Update"
             
             # Pull dulu barangkali ada update manual dari Anda agar tidak crash
             git pull --rebase origin main
