@@ -6,29 +6,13 @@ import time
 import re
 import random
 import warnings 
-import sys
-import subprocess
 import string
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from datetime import datetime
 from slugify import slugify
 from io import BytesIO
-from PIL import Image, ImageEnhance, ImageOps, ImageFilter, ImageDraw, ImageFont
-from groq import Groq, APIError
-
-# ==========================================
-# 🛠️ AUTO-INSTALL DEPENDENCY (ANTI-BLOCK)
-# ==========================================
-# Kita butuh 'cloudscraper' untuk tembus Cloudflare (Error 530).
-# Script ini akan otomatis menginstallnya jika belum ada.
-try:
-    import cloudscraper
-    print("✅ Cloudscraper library found.")
-except ImportError:
-    print("⚠️ Cloudscraper not found. Installing automatically to bypass Cloudflare...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "cloudscraper"])
-    import cloudscraper
-    print("✅ Cloudscraper installed successfully.")
+from PIL import Image, ImageDraw, ImageFont
+from groq import Groq
 
 # --- SUPPRESS WARNINGS ---
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -58,15 +42,15 @@ if not GROQ_API_KEYS:
     exit(1)
 
 # ==========================================
-# 🎨 POLLINATIONS AI ENGINE (CLOUDSCRAPER VERSION)
+# 🎨 POLLINATIONS AI ENGINE (PROXY BRIDGE MODE)
 # ==========================================
 
-def add_watermark(image_data):
+def add_watermark(image_bytes):
     """
-    Menerima bytes gambar, memberi watermark, mengembalikan objek Image.
+    Memberi watermark pada gambar dari bytes, return object Image.
     """
     try:
-        img = Image.open(BytesIO(image_data))
+        img = Image.open(BytesIO(image_bytes))
         img = img.convert("RGB")
         draw = ImageDraw.Draw(img)
         text = "@JeepDaily"
@@ -96,7 +80,8 @@ def add_watermark(image_data):
 
 def generate_cartoon_image(keyword, filename):
     """
-    Menggunakan cloudscraper untuk bypass Error 530/403 dari Cloudflare.
+    Menggunakan 'wsrv.nl' sebagai jembatan (proxy) untuk menghindari
+    blokir IP GitHub Actions oleh Pollinations.ai.
     """
     if not os.path.exists(IMAGE_DIR): os.makedirs(IMAGE_DIR, exist_ok=True)
     output_path = f"{IMAGE_DIR}/{filename}"
@@ -105,56 +90,55 @@ def generate_cartoon_image(keyword, filename):
     clean_keyword = re.sub(r'[^\w\s\-]', '', keyword).strip()
     if len(clean_keyword) > 80: clean_keyword = clean_keyword[:80]
     
-    # 2. Prompt yang lebih 'aman' untuk URL
-    prompt_suffix = "cartoon vector art jeep offroad gta style flat color 8k"
-    full_prompt = f"{clean_keyword} {prompt_suffix}"
-    encoded_prompt = quote(full_prompt)
+    # 2. Siapkan URL Pollinations Asli
+    # Prompt style
+    prompt = f"{clean_keyword} cartoon vector art jeep offroad gta style flat color 8k"
+    encoded_prompt = quote(prompt)
+    seed = random.randint(100, 99999999)
     
-    print(f"      🎨 Generating AI Image for: '{clean_keyword}'")
-
-    # 3. Inisialisasi Cloudscraper (Ini kuncinya!)
-    # create_scraper akan membuat sesi yang terlihat seperti browser asli (Chrome)
-    scraper = cloudscraper.create_scraper(
-        browser={
-            'browser': 'chrome',
-            'platform': 'linux',
-            'desktop': True
-        }
-    )
-
-    models = ["flux", "turbo"]
+    # URL Pollinations Target (Jangan diakses langsung)
+    # Kita gunakan model 'flux' (bagus) atau 'turbo' (cepat)
+    pollinations_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&seed={seed}&nologo=true&model=flux"
     
-    for i, model in enumerate(models):
-        try:
-            seed = random.randint(100, 99999999)
-            # URL Pollinations Standard
-            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&seed={seed}&nologo=true&model={model}"
-            
-            # Gunakan scraper.get() bukan requests.get()
-            resp = scraper.get(url, timeout=60)
-            
-            if resp.status_code == 200:
-                # Cek tipe konten
-                if 'image' in resp.headers.get('Content-Type', ''):
-                    # Proses Watermark
-                    img = add_watermark(resp.content)
-                    if img:
-                        img.save(output_path, "WEBP", quality=90)
-                        
-                        if os.path.exists(output_path) and os.path.getsize(output_path) > 3000:
-                            return f"/images/{filename}"
-                else:
-                    print(f"      ⚠️ Attempt {i+1}: Received non-image content (Likely HTML error page).")
+    # 3. Gunakan PROXY BRIDGE (wsrv.nl)
+    # wsrv.nl akan mendownload gambar dari pollinations (IP mereka bersih),
+    # lalu kita download dari wsrv.nl.
+    # urlencode digunakan agar URL pollinations aman di dalam URL wsrv
+    proxy_url = f"https://wsrv.nl/?url={quote(pollinations_url)}&output=webp&q=100"
+    
+    print(f"      🎨 Generating via Proxy for: '{clean_keyword}'")
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+
+    try:
+        # Request ke Proxy, bukan ke Pollinations langsung
+        resp = requests.get(proxy_url, headers=headers, timeout=60)
+        
+        if resp.status_code == 200:
+            if 'image' in resp.headers.get('Content-Type', ''):
+                # Proses Watermark
+                img = add_watermark(resp.content)
+                if img:
+                    img.save(output_path, "WEBP", quality=90)
+                    
+                    if os.path.exists(output_path) and os.path.getsize(output_path) > 3000:
+                        return f"/images/{filename}"
             else:
-                print(f"      ⚠️ Attempt {i+1}: Cloudscraper Status {resp.status_code} (Model: {model})")
-                
-        except Exception as e:
-            print(f"      ⏳ Attempt {i+1}: Scraper Error: {e}")
+                print("      ⚠️ Proxy returned non-image content.")
+        else:
+            print(f"      ⚠️ Proxy Bridge Failed: {resp.status_code}")
             
-        time.sleep(5) # Jeda wajib
+    except Exception as e:
+        print(f"      ❌ Image Gen Error: {e}")
 
-    print("      ❌ Failed to generate image. Using fallback logic.")
-    return ""
+    # --- FALLBACK JIKA PROXY GAGAL ---
+    # Jika gagal download, kita jangan biarkan artikel tanpa gambar.
+    # Kita return URL Pollinations langsung (Hotlinking).
+    # Browser user yang akan membukanya nanti, bukan server kita.
+    print("      ⚠️ Downloading failed. Falling back to hotlink URL.")
+    return pollinations_url
 
 # ==========================================
 # ⚙️ STANDARD CONFIG
@@ -297,7 +281,7 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print("🔥 JEEP ENGINE STARTED (CLOUDSCRAPER MODE) 🔥")
+    print("🔥 JEEP ENGINE STARTED (PROXY MODE) 🔥")
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Reading Source: {source_name}")
@@ -323,11 +307,11 @@ def main():
             try:
                 data = json.loads(raw_json)
                 
-                # 2. Image (Generate using Cloudscraper)
+                # 2. Image (Generate using Proxy Bridge)
                 image_keyword = data.get('main_keyword', clean_title)
                 final_img = generate_cartoon_image(image_keyword, f"{slug}.webp")
                 
-                # Fallback string kosong jika gagal
+                # Fallback: Pastikan string valid
                 if not final_img: final_img = ""
 
                 # 3. Save
@@ -369,7 +353,7 @@ url: "/{slug}/"
                 processed += 1
                 
                 # Jeda Wajib
-                time.sleep(10) 
+                time.sleep(8) 
             except Exception as e:
                 print(f"      ❌ Critical Error: {e}")
 
