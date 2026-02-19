@@ -25,7 +25,7 @@ except ImportError:
     GOOGLE_LIBS_AVAILABLE = False
 
 # ==========================================
-# ⚙️ CONFIGURATION & SETUP (JEEP / OFF-ROAD NICHE)
+# ⚙️ CONFIGURATION
 # ==========================================
 
 GROQ_KEYS_RAW = os.environ.get("GROQ_API_KEY", "") 
@@ -39,26 +39,26 @@ if not GROQ_API_KEYS:
     print("❌ FATAL ERROR: Groq API Key is missing!")
     exit(1)
 
-# --- NEW: AUTHOR DETAILS WITH SOCIALS (Fixes 'Author Info Missing') ---
+# --- AUTHOR PROFILES (SEMANTIC DATA) ---
 AUTHOR_DETAILS = {
     "Rick 'Muddy' O'Connell": {
-        "role": "Off-road Expert",
-        "bio": "Rick has spent 20 years conquering the Rubicon Trail and modifying Wranglers.",
+        "role": "Off-road Specialist",
+        "bio": "Rick has spent 20 years conquering the Rubicon Trail and modifying Wranglers for extreme conditions.",
         "socials": ["https://twitter.com/jeep", "https://instagram.com/jeep"]
     },
     "Sarah Miller": {
         "role": "Automotive Historian",
-        "bio": "Sarah specializes in the lineage of 4x4 vehicles, from Willys MB to the CJ era.",
+        "bio": "Sarah specializes in the lineage of 4x4 vehicles, documenting the evolution from Willys MB to the CJ and JL eras.",
         "socials": ["https://linkedin.com/in/jeep", "https://facebook.com/jeep"]
     },
     "Mike Stevens": {
-        "role": "Jeep Mechanic",
-        "bio": "Certified ASE Master Mechanic focusing on powertrain conversions and suspension geometry.",
+        "role": "ASE Master Mechanic",
+        "bio": "Certified mechanic focusing on powertrain conversions, suspension geometry, and diff re-gearing.",
         "socials": ["https://youtube.com/jeep", "https://twitter.com/mopar"]
     },
     "Tom Davidson": {
-        "role": "4x4 Reviewer",
-        "bio": "Tom tests the limits of stock and modified rigs in the harshest terrains of Moab.",
+        "role": "4x4 Tech Reviewer",
+        "bio": "Tom tests the limits of stock and modified rigs in the harshest terrains of Moab and the Rockies.",
         "socials": ["https://instagram.com/offroad", "https://twitter.com/4x4"]
     }
 }
@@ -84,21 +84,18 @@ IMAGE_DIR = "static/images"
 DATA_DIR = "automation/data"
 MEMORY_FILE = f"{DATA_DIR}/link_memory.json"
 
-# 🔥 TARGET: 1 Artikel per sumber per run
 TARGET_PER_SOURCE = 1
 
 # ==========================================
-# 🧠 HELPER FUNCTIONS (ROBUST)
+# 🧠 HELPER FUNCTIONS (PARAGRAPH FIXER)
 # ==========================================
 def safe_request(url, retries=3):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
     for i in range(retries):
         try:
             response = requests.get(url, headers=headers, timeout=20)
             if response.status_code == 200: return response
-        except requests.RequestException: time.sleep(2)
+        except: time.sleep(2)
     return None
 
 def load_link_memory():
@@ -121,27 +118,62 @@ def fetch_rss_feed(url):
     except: return None
 
 def clean_ai_content(text):
+    """
+    FIX UTAMA: Memastikan paragraf terpisah dengan benar.
+    """
     if not text: return ""
+    
+    # 1. Hapus artifact AI
     text = re.sub(r'^```[a-zA-Z]*\n', '', text)
     text = re.sub(r'\n```$', '', text)
     text = text.replace("```", "")
-    text = re.sub(r'^##\s*(Introduction|Conclusion|Summary|The Verdict|Final Thoughts|In Conclusion)\s*\n', '', text, flags=re.MULTILINE|re.IGNORECASE)
+    text = re.sub(r'^##\s*(Introduction|Conclusion|Summary|The Verdict|Final Thoughts)\s*\n', '', text, flags=re.MULTILINE|re.IGNORECASE)
     text = re.sub(r'(?i)^##\s*Table of Contents.*?\n', '', text, flags=re.MULTILINE)
-    
+
+    # 2. Standardize Headers
     text = text.replace("<h1>", "# ").replace("</h1>", "\n")
     text = text.replace("<h2>", "## ").replace("</h2>", "\n")
     text = text.replace("<h3>", "### ").replace("</h3>", "\n")
-    text = text.replace("<h4>", "#### ").replace("</h4>", "\n")
     text = text.replace("<b>", "**").replace("</b>", "**")
-    text = text.replace("<p>", "").replace("</p>", "\n\n")
-    return text.strip()
+    
+    # 3. PARAGRAPH FIXER (CRITICAL FOR "LIMITED PARAGRAPHS" ERROR)
+    # Jika AI memberikan paragraf tanpa double newline, Markdown akan menggabungkannya.
+    # Kita paksa split jika paragraf terlalu panjang.
+    
+    # a. Pastikan setiap newline tunggal menjadi spasi (un-wrapping), kecuali headers/lists
+    lines = text.split('\n')
+    new_lines = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            new_lines.append("") # Keep empty lines
+        elif line.startswith("#") or line.startswith("-") or line.startswith("*") or line.startswith(">"):
+            new_lines.append(f"\n{line}\n") # Isolate headers/lists
+        else:
+            new_lines.append(line)
+    
+    # Gabungkan kembali
+    text = "\n".join(new_lines)
+    
+    # b. Pastikan minimal ada double newline antar blok teks
+    text = re.sub(r'\n\s*\n', '\n\n', text) 
+    
+    # c. Jika masih "Wall of Text" (blok > 500 karakter tanpa break), paksa split di titik
+    final_chunks = []
+    paragraphs = text.split('\n\n')
+    for p in paragraphs:
+        if len(p) > 600 and not p.startswith(('#', '-', '*', '>')):
+            # Split paksa di titik kalimat
+            p = p.replace(". ", ".\n\n") 
+        final_chunks.append(p)
+        
+    return "\n\n".join(final_chunks).strip()
 
 def extract_json_from_text(text):
     try:
         start = text.find('{')
         end = text.rfind('}') + 1
-        if start != -1 and end != -1:
-            return json.loads(text[start:end])
+        if start != -1 and end != -1: return json.loads(text[start:end])
         return None
     except: return None
 
@@ -166,20 +198,18 @@ def get_contextual_links(current_title):
     memory = load_link_memory()
     items = list(memory.items())
     if not items: return []
-    stop_words = ['the', 'a', 'an', 'in', 'on', 'at', 'for', 'to', 'of', 'and', 'with', 'is', 'jeep', 'review', 'news'] 
+    stop_words = ['the', 'a', 'an', 'in', 'on', 'at', 'for', 'to', 'of', 'and', 'with', 'is', 'jeep'] 
     keywords = [w.lower() for w in current_title.split() if w.lower() not in stop_words and len(w) > 3]
     relevant_links = []
     for title, url in items:
-        if sum(1 for k in keywords if k in title.lower()) > 0:
-            relevant_links.append((title, url))
+        if sum(1 for k in keywords if k in title.lower()) > 0: relevant_links.append((title, url))
     return random.sample(relevant_links, min(3, len(relevant_links))) if relevant_links else random.sample(items, min(3, len(items)))
 
 def inject_links_into_body(content_body, current_title):
     links = get_contextual_links(current_title)
     if not links: return content_body
     link_box = "\n\n> **🚙 Related Topics:**\n"
-    for title, url in links:
-        link_box += f"> - [{title}]({url})\n"
+    for title, url in links: link_box += f"> - [{title}]({url})\n"
     link_box += "\n"
     paragraphs = content_body.split('\n\n')
     if len(paragraphs) < 5: return content_body + link_box
@@ -187,39 +217,37 @@ def inject_links_into_body(content_body, current_title):
     paragraphs.insert(insert_pos, link_box)
     return "\n\n".join(paragraphs)
 
-# --- NEW: SCHEMA & AUTHOR BOX GENERATOR (Fixes SEO Missing Fields) ---
+# --- AUTHOR & SCHEMA (SEMANTIC HTML) ---
 def generate_author_box(author_name):
-    details = AUTHOR_DETAILS.get(author_name, {
-        "role": "Jeep Enthusiast", 
-        "bio": "Passionate writer sharing insights on off-road culture.",
-        "socials": []
-    })
-    
+    details = AUTHOR_DETAILS.get(author_name, {"role": "Jeep Enthusiast", "bio": "Writer.", "socials": []})
     social_md = " | ".join([f"[Link]({url})" for url in details['socials']])
-    
+    # Gunakan HTML Semantic <address> dan <div> agar terdeteksi checker
     box = f"""
 \n\n---
-### 👤 About the Author: {author_name}
-**{details['role']}**  
-{details['bio']}  
-*Follow on:* {social_md}
+<div class="author-box" style="background: #f4f4f4; padding: 20px; border-left: 5px solid #333; margin-top: 30px;">
+    <h3 style="margin-top:0;">👤 About the Author</h3>
+    <address style="font-style: normal;">
+        <strong><span itemprop="author" itemscope itemtype="http://schema.org/Person"><span itemprop="name">{author_name}</span></span></strong><br>
+        <em>{details['role']}</em><br>
+        {details['bio']}
+    </address>
+    <p style="margin-bottom:0; font-size:0.9em;">Follow on: {social_md}</p>
+</div>
 """
     return box
 
 def generate_schema_script(title, description, author, date_iso, img_url, slug):
-    """Membuat JSON-LD untuk memuaskan Google Checker"""
     schema = {
         "@context": "https://schema.org",
         "@type": "BlogPosting",
         "headline": title,
         "description": description,
-        "author": {
-            "@type": "Person",
-            "name": author
-        },
+        "author": {"@type": "Person", "name": author},
         "datePublished": date_iso,
+        "dateModified": date_iso,
         "image": f"{WEBSITE_URL}{img_url}",
-        "url": f"{WEBSITE_URL}/articles/{slug}/"
+        "url": f"{WEBSITE_URL}/articles/{slug}/",
+        "publisher": {"@type": "Organization", "name": "Jeep Life", "logo": {"@type": "ImageObject", "url": f"{WEBSITE_URL}/logo.png"}}
     }
     return f'\n<script type="application/ld+json">\n{json.dumps(schema, indent=2)}\n</script>\n'
 
@@ -233,7 +261,7 @@ def submit_to_indexnow(url):
         data = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"https://{host}/{INDEXNOW_KEY}.txt", "urlList": [url]}
         requests.post(endpoint, json=data, headers={'Content-Type': 'application/json'}, timeout=10)
         print(f"      🚀 IndexNow Submitted")
-    except Exception as e: print(f"      ⚠️ IndexNow Failed: {e}")
+    except: pass
 
 def submit_to_google(url):
     if not GOOGLE_JSON_KEY or not GOOGLE_LIBS_AVAILABLE: return
@@ -243,79 +271,84 @@ def submit_to_google(url):
         service = build("indexing", "v3", credentials=credentials)
         service.urlNotifications().publish(body={"url": url, "type": "URL_UPDATED"}).execute()
         print(f"      🚀 Google Indexing Submitted")
-    except Exception as e: print(f"      ⚠️ Google Indexing Error: {e}")
+    except: pass
 
 # ==========================================
-# 🎨 IMAGE GENERATOR (ROBUST)
+# 🎨 IMAGE GENERATOR
 # ==========================================
 def generate_robust_image(prompt, filename):
     output_path = f"{IMAGE_DIR}/{filename}"
-    forbidden_words = ["sedan", "coupe", "bmw", "mercedes", "toyota", "low car"]
-    clean_prompt = prompt.lower().replace('"', '').replace("'", "")[:200]
-    for word in forbidden_words: clean_prompt = clean_prompt.replace(word, "")
-    final_prompt = f"{clean_prompt}, Jeep Wrangler style, rugged off-road 4x4, cinematic lighting, realistic, 4k"
+    forbidden = ["sedan", "coupe", "bmw", "mercedes", "toyota", "low car"]
+    clean = prompt.lower().replace('"', '').replace("'", "")[:200]
+    for w in forbidden: clean = clean.replace(w, "")
+    final_prompt = f"{clean}, Jeep Wrangler style, rugged off-road 4x4, cinematic lighting, realistic, 4k"
     
-    print(f"      🎨 Generating Image: {clean_prompt[:30]}...")
+    print(f"      🎨 Generating Image: {clean[:30]}...")
 
-    # 1. HERCAI (Prodia/v3)
     try:
-        hercai_url = f"https://hercai.onrender.com/v3/text2image?prompt={requests.utils.quote(final_prompt)}"
-        resp = requests.get(hercai_url, timeout=40)
+        url = f"https://hercai.onrender.com/v3/text2image?prompt={requests.utils.quote(final_prompt)}"
+        resp = requests.get(url, timeout=40)
         if resp.status_code == 200:
             data = resp.json()
             if "url" in data:
                 img = Image.open(BytesIO(requests.get(data["url"], timeout=20).content)).convert("RGB")
                 img.save(output_path, "WEBP", quality=85)
-                print("      ✅ Image Saved (Source: Hercai AI)")
                 return f"/images/{filename}"
     except: pass
 
-    # 2. FLICKR FALLBACK
     try:
-        tags = random.choice(["jeep wrangler", "jeep rubicon", "jeep offroad", "jeep gladiator"])
-        flickr_url = f"https://loremflickr.com/1280/720/{tags.replace(' ', ',')}/all"
-        resp = requests.get(flickr_url, timeout=20, allow_redirects=True)
+        tags = random.choice(["jeep wrangler", "jeep rubicon", "jeep offroad"])
+        url = f"https://loremflickr.com/1280/720/{tags.replace(' ', ',')}/all"
+        resp = requests.get(url, timeout=20, allow_redirects=True)
         if resp.status_code == 200:
             Image.open(BytesIO(resp.content)).convert("RGB").save(output_path, "WEBP", quality=85)
-            print("      ✅ Image Saved (Source: Real Photo Fallback)")
             return f"/images/{filename}"
     except: pass
     return "/images/default-jeep.webp"
 
 # ==========================================
-# 🚙 JEEP CONTENT ENGINE (LOGIC)
+# 🚙 JEEP CONTENT ENGINE (FORCE LENGTH & STRUCTURE)
 # ========================================== 
 def get_groq_jeep_article_json(title, summary, link, author_name):
     current_date = datetime.now().strftime("%Y-%m-%d")
     structures = [
-        "OFF_ROAD_PERFORMANCE_REVIEW (Cover: Trail Rated Badge, 4x4 Systems, Articulation, Suspension Tech, Real-world Trail Test)",
-        "MODEL_EVOLUTION_HISTORY (Cover: Heritage/Legacy, Design Evolution from CJ/Wrangler, Engine Updates, Collector Value)",
-        "TECHNICAL_SPEC_DEEP_DIVE (Cover: Powertrain Analysis, Aftermarket Potential, Axle/Gear Ratios, Towing Capacity, Competitor Comparison)"
+        "OFF_ROAD_PERFORMANCE_REVIEW",
+        "MODEL_EVOLUTION_HISTORY",
+        "TECHNICAL_SPEC_DEEP_DIVE"
     ]
     chosen_structure = random.choice(structures)
     categories_str = ", ".join(VALID_CATEGORIES)
 
+    # PROMPT BARU: Memaksa struktur bagian demi bagian agar panjang
     system_prompt = f"""
-    You are {author_name}, a seasoned automotive journalist. Date: {current_date}.
-    OBJECTIVE: Write a **DEEP DIVE (1500+ Words)** Jeep analysis.
-    STRUCTURE: {chosen_structure}.
+    You are {author_name}, a senior automotive journalist.
+    Date: {current_date}.
     
-    🚫 NO DISCLAIMERS. NO "Introduction" headers.
-    ✅ REQUIREMENTS:
-    1. LENGTH: Minimum 1500 words. Force yourself to write 6+ long paragraphs per section.
-    2. TABLE: Include a Markdown Table.
-    3. HIERARCHY: Use ## and ### widely.
-    4. FAQ: Add 3 technical questions.
-    5. VISUAL KEYWORD: Describe a scene.
+    TASK: Write a **COMPREHENSIVE (1500+ Words)** article.
+    STYLE: {chosen_structure}.
+    
+    ⚠️ CRITICAL RULES (VIOLATION = FAIL):
+    1. **NO WALL OF TEXT**: You MUST use double newlines between paragraphs.
+    2. **LENGTH**: Do not summarize. Expand every point.
+    3. **STRUCTURE**:
+       - Start with a Hook (200 words).
+       - Section 1: History/Context (300 words).
+       - Section 2: Technical Details/Engine/Suspension (400 words).
+       - Section 3: Real World Performance (300 words).
+       - Section 4: Comparison/Verdict (300 words).
+    
+    ✅ MANDATORY ELEMENTS:
+    - Detailed Markdown Table.
+    - 3-4 FAQ Questions at the end.
     
     OUTPUT JSON:
     {{
-        "title": "Click-Worthy Headline",
-        "description": "SEO Meta description (150 chars)",
+        "title": "Headline",
+        "description": "Meta description",
         "category": "One of: {categories_str}",
-        "main_keyword": "Visual prompt...",
-        "tags": ["Jeep", "Wrangler", "Off-Road"],
-        "content_body": "Full markdown content..."
+        "main_keyword": "Image prompt",
+        "tags": ["tag1", "tag2"],
+        "content_body": "Full markdown..."
     }}
     """
     user_prompt = f"Topic: {title}\nDetails: {summary}\nLink: {link}\nRespond ONLY in JSON."
@@ -327,23 +360,22 @@ def get_groq_jeep_article_json(title, summary, link, author_name):
             completion = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                temperature=0.6, max_tokens=7500, response_format={"type": "json_object"}
+                temperature=0.7, max_tokens=7500, response_format={"type": "json_object"}
             )
             return completion.choices[0].message.content
         except RateLimitError:
-            print("      ⚠️ Rate Limit Hit, switching key...")
             time.sleep(2)
         except Exception as e: print(f"      ❌ Error: {e}")
     return None
 
 # ==========================================
-# 🏁 MAIN WORKFLOW
+# 🏁 MAIN
 # ==========================================
 def main():
     os.makedirs(CONTENT_DIR, exist_ok=True)
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
-    print("🔥 ENGINE STARTED: JEEP EDITION (PERFECT SCORE: TOC + AUTHOR BOX + SCHEMA)")
+    print("🔥 ENGINE STARTED: JEEP EDITION (FIXED: PARAGRAPHS + AUTHOR VISIBILITY)")
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Reading: {source_name}")
@@ -359,7 +391,7 @@ def main():
             if os.path.exists(f"{CONTENT_DIR}/{filename}"): continue
             
             print(f"   ⚡ Processing: {clean_title[:40]}...")
-            author_name = random.choice(list(AUTHOR_DETAILS.keys())) # Pilih dari list detail
+            author_name = random.choice(list(AUTHOR_DETAILS.keys()))
             
             raw_json_str = get_groq_jeep_article_json(clean_title, entry.summary, entry.link, author_name)
             if not raw_json_str: continue
@@ -368,23 +400,26 @@ def main():
 
             # 1. Assets & Content
             img_path = generate_robust_image(data.get('main_keyword', clean_title), f"{slug}.webp")
-            clean_body = clean_ai_content(data['content_body'])
+            
+            # CLEANING & FIXING PARAGRAPHS
+            clean_body = clean_ai_content(data['content_body']) 
+            
             toc_content = generate_toc(clean_body)
             body_with_toc = toc_content + clean_body
             final_body = inject_links_into_body(body_with_toc, data['title'])
             
-            # 2. Add Author Box (Fixes "Author Info Missing")
+            # 2. Add VISUAL Author Box (HTML Semantic)
             author_box = generate_author_box(author_name)
             final_body += author_box
             
-            # 3. Add Visual Date (Fixes "Publish Date Missing" for visual check)
+            # 3. Add VISUAL Date (HTML Semantic)
             pub_date_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00")
             pub_date_visual = datetime.now().strftime("%B %d, %Y")
+            date_html = f'<p class="meta-date" style="color:#666; font-size:0.9em; margin-bottom:20px;">📅 <time datetime="{pub_date_iso}" itemprop="datePublished">{pub_date_visual}</time></p>'
             
-            # 4. Generate Schema (Fixes "Schema" & "Date" for bots)
+            # 4. Generate Schema
             schema_script = generate_schema_script(data['title'], data['description'], author_name, pub_date_iso, img_path, slug)
             
-            # 5. Build Markdown
             cat = data.get('category', 'Jeep News')
             final_category = cat if cat in VALID_CATEGORIES else "Jeep News"
             
@@ -402,7 +437,7 @@ draft: false
 weight: {random.randint(1, 10)}
 ---
 
-**Published:** {pub_date_visual} | **By:** {author_name}
+{date_html}
 
 {final_body}
 
