@@ -1,32 +1,17 @@
 import os
 import json
-import requests # Hanya untuk RSS
+import requests
 import feedparser
 import time
 import re
 import random
 import warnings 
-import sys
-import subprocess
-from urllib.parse import quote
+import string
 from datetime import datetime
 from slugify import slugify
 from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont
-from groq import Groq
-
-# ==========================================
-# 🛠️ AUTO-INSTALL: CURL_CFFI (WAJIB)
-# ==========================================
-# Ini adalah inti solusinya. Library ini meniru browser Chrome asli.
-try:
-    from curl_cffi import requests as cffi_requests
-    print("✅ Library curl_cffi ditemukan.")
-except ImportError:
-    print("⚠️ Menginstall curl_cffi untuk bypass blokir...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "curl_cffi"])
-    from curl_cffi import requests as cffi_requests
-    print("✅ Library curl_cffi berhasil diinstall.")
+from PIL import Image
+from groq import Groq, APIError, RateLimitError
 
 # --- SUPPRESS WARNINGS ---
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -38,10 +23,9 @@ try:
     GOOGLE_LIBS_AVAILABLE = True
 except ImportError:
     GOOGLE_LIBS_AVAILABLE = False
-    print("⚠️ Google Indexing Libs not found (Skipping).")
 
 # ==========================================
-# ⚙️ CONFIGURATION & SETUP
+# ⚙️ CONFIGURATION & SETUP (VESLIFE / JEEP NICHE)
 # ==========================================
 
 GROQ_KEYS_RAW = os.environ.get("GROQ_API_KEY", "") 
@@ -49,115 +33,13 @@ GROQ_API_KEYS = [k.strip() for k in GROQ_KEYS_RAW.split(",") if k.strip()]
 
 WEBSITE_URL = "https://dother.biz.id" 
 INDEXNOW_KEY = "e74819b68a0f40e98f6ec3dc24f610f0" 
-GOOGLE_JSON_KEY = os.environ.get("GOOGLE_INDEXING_KEY", "") 
+GOOGLE_JSON_KEY = os.environ.get("GOOGLE_INDEXING_KEY", "")
 
 if not GROQ_API_KEYS:
     print("❌ FATAL ERROR: Groq API Key is missing!")
     exit(1)
 
-# ==========================================
-# 🎨 POLLINATIONS AI ENGINE (REAL BROWSER SPOOFING)
-# ==========================================
-
-def add_watermark(image_bytes):
-    try:
-        img = Image.open(BytesIO(image_bytes))
-        img = img.convert("RGB")
-        draw = ImageDraw.Draw(img)
-        text = "@JeepDaily"
-        
-        try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
-        except:
-            font = ImageFont.load_default()
-            
-        img_w, img_h = img.size
-        text_bbox = draw.textbbox((0, 0), text, font=font)
-        text_w = text_bbox[2] - text_bbox[0]
-        text_h = text_bbox[3] - text_bbox[1]
-        
-        x = img_w - text_w - 40
-        y = 40
-        
-        draw.text((x+3, y+3), text, fill=(0, 0, 0, 160), font=font)
-        draw.text((x, y), text, fill=(255, 255, 255, 240), font=font)
-        
-        return img
-    except Exception as e:
-        print(f"      ⚠️ Watermark error: {e}")
-        return None
-
-def generate_cartoon_image(keyword, filename):
-    """
-    Menggunakan curl_cffi dengan impersonate Chrome 120.
-    """
-    if not os.path.exists(IMAGE_DIR): os.makedirs(IMAGE_DIR, exist_ok=True)
-    output_path = f"{IMAGE_DIR}/{filename}"
-    
-    clean_keyword = re.sub(r'[^\w\s\-]', '', keyword).strip()
-    if len(clean_keyword) > 90: clean_keyword = clean_keyword[:90]
-    
-    # Prompt yang lebih spesifik untuk kartun
-    prompt = f"{clean_keyword} cartoon vector art jeep offroad style flat color 8k"
-    encoded_prompt = quote(prompt)
-    
-    print(f"      🎨 Generating AI Image for: '{clean_keyword}'")
-
-    # Kita pakai model 'turbo' dulu karena 'flux' sering timeout di server gratisan
-    models_to_try = ["turbo", "flux"]
-    
-    # Session browser palsu
-    session = cffi_requests.Session()
-
-    for model in models_to_try:
-        try:
-            seed = random.randint(100, 99999999)
-            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1280&height=720&seed={seed}&nologo=true&model={model}"
-            
-            # --- THE MAGIC KEY ---
-            # impersonate="chrome120" membuat server yakin ini adalah Chrome Browser
-            resp = session.get(
-                url, 
-                impersonate="chrome120", 
-                headers={
-                    "Referer": "https://pollinations.ai/",
-                    "Origin": "https://pollinations.ai",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                },
-                timeout=60 # Timeout diperpanjang
-            )
-            
-            if resp.status_code == 200:
-                content_type = resp.headers.get('Content-Type', '')
-                if 'image' in content_type:
-                    img = add_watermark(resp.content)
-                    if img:
-                        img.save(output_path, "WEBP", quality=90)
-                        
-                        if os.path.exists(output_path) and os.path.getsize(output_path) > 3000:
-                            return f"/images/{filename}"
-                else:
-                    print(f"      ⚠️ Model '{model}' returned non-image (Type: {content_type})")
-            else:
-                print(f"      ⚠️ Model '{model}' Failed: Status {resp.status_code}")
-                
-        except Exception as e:
-            print(f"      ⏳ Model '{model}' Error: {e}")
-        
-        time.sleep(3) # Jeda antar model
-
-    # --- FINAL FAILSAFE ---
-    # Jika download gagal total, JANGAN biarkan kosong.
-    # Kembalikan URL Pollinations agar gambar tetap muncul (via Hotlinking di browser user).
-    # Ini lebih baik daripada tidak ada gambar sama sekali.
-    print("      ⚠️ Download failed. Using Hotlink URL as fallback.")
-    fallback_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?model=turbo&nologo=true"
-    return fallback_url
-
-# ==========================================
-# ⚙️ STANDARD CONFIG
-# ==========================================
-
+# Penulis dengan Otoritas (E-E-A-T)
 AUTHOR_PROFILES = [
     "Rick 'Muddy' O'Connell (Off-road Expert)", 
     "Sarah Miller (Automotive Historian)",
@@ -166,13 +48,18 @@ AUTHOR_PROFILES = [
     "Elena Forza (Car Design Analyst)"
 ]
 
+# Kategori Spesifik
 VALID_CATEGORIES = [
     "Wrangler Life", "Classic Jeeps", "Grand Cherokee", 
     "Gladiator Truck", "Off-road Tips", "Jeep History", "Maintenance & Mods"
 ]
 
 RSS_SOURCES = {
-    "Jeep Wrangler News": "https://news.google.com/rss/search?q=Jeep+Wrangler+Review+OR+News&hl=en-US&gl=US&ceid=US:en",
+    "Autoblog Jeep": "https://www.autoblog.com/category/jeep/rss.xml",
+    "Motor1 Jeep": "https://www.motor1.com/rss/make/jeep/",
+    "Mopar Insiders": "https://moparinsiders.com/feed/", 
+    "Jeep News": "https://www.autoevolution.com/rss/cars/jeep/",
+     "Jeep Wrangler News": "https://news.google.com/rss/search?q=Jeep+Wrangler+Review+OR+News&hl=en-US&gl=US&ceid=US:en",
     "Jeep Gladiator": "https://news.google.com/rss/search?q=Jeep+Gladiator+News&hl=en-US&gl=US&ceid=US:en",
     "Classic Jeep History": "https://news.google.com/rss/search?q=Classic+Jeep+Willys+History&hl=en-US&gl=US&ceid=US:en",
     "Offroad Lifestyle": "https://news.google.com/rss/search?q=Offroad+4x4+Adventure&hl=en-US&gl=US&ceid=US:en"
@@ -182,7 +69,9 @@ CONTENT_DIR = "content/articles"
 IMAGE_DIR = "static/images"
 DATA_DIR = "automation/data"
 MEMORY_FILE = f"{DATA_DIR}/link_memory.json"
-TARGET_PER_SOURCE = 1 
+
+# 🔥 TARGET: 2 Artikel per sumber per run
+TARGET_PER_SOURCE = 1
 
 # ==========================================
 # 🧠 HELPER FUNCTIONS
@@ -197,21 +86,16 @@ def save_link_to_memory(title, slug):
     os.makedirs(DATA_DIR, exist_ok=True)
     memory = load_link_memory()
     memory[title] = f"/articles/{slug}" 
-    if len(memory) > 300: memory = dict(list(memory.items())[-300:])
+    # Simpan lebih banyak history untuk Silo Linking yang lebih baik
+    if len(memory) > 500: memory = dict(list(memory.items())[-500:])
     with open(MEMORY_FILE, 'w') as f: json.dump(memory, f, indent=2)
 
-def get_internal_links_markdown():
-    memory = load_link_memory()
-    items = list(memory.items())
-    if not items: return ""
-    count = min(4, len(items))
-    selected_items = random.sample(items, count)
-    return "\n".join([f"- [{title}]({url})" for title, url in selected_items])
-
 def fetch_rss_feed(url):
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
     try:
-        response = requests.get(url, headers=headers, timeout=20)
+        response = requests.get(url, headers=headers, timeout=15)
         return feedparser.parse(response.content) if response.status_code == 200 else None
     except: return None
 
@@ -220,19 +104,82 @@ def clean_ai_content(text):
     text = re.sub(r'^```[a-zA-Z]*\n', '', text)
     text = re.sub(r'\n```$', '', text)
     text = text.replace("```", "")
+    text = re.sub(r'^##\s*(Introduction|Conclusion|Summary|The Verdict|Final Thoughts|In Conclusion)\s*\n', '', text, flags=re.MULTILINE|re.IGNORECASE)
+    
+    text = text.replace("<h1>", "# ").replace("</h1>", "\n")
+    text = text.replace("<h2>", "## ").replace("</h2>", "\n")
+    text = text.replace("<h3>", "### ").replace("</h3>", "\n")
+    text = text.replace("<h4>", "#### ").replace("</h4>", "\n")
+    text = text.replace("<b>", "**").replace("</b>", "**")
+    text = text.replace("<p>", "").replace("</p>", "\n\n")
     return text.strip()
 
 # ==========================================
-# 🚀 INDEXING LOGS
+# 🧠 SMART SILO LINKING (AUTHORITY BOOSTER)
+# ==========================================
+def get_contextual_links(current_title):
+    """
+    Mencari link yang RELEVAN berdasarkan kata kunci di judul.
+    Jika tidak ada yang relevan, baru ambil random.
+    Ini menciptakan struktur 'Silo' yang disukai Google.
+    """
+    memory = load_link_memory()
+    items = list(memory.items())
+    if not items: return []
+    
+    # Ekstrak kata kunci sederhana (hapus kata sambung)
+    stop_words = ['the', 'a', 'an', 'in', 'on', 'at', 'for', 'to', 'of', 'and', 'with', 'is', 'jeep'] 
+    keywords = [w.lower() for w in current_title.split() if w.lower() not in stop_words and len(w) > 3]
+    
+    relevant_links = []
+    
+    # Cari judul yang mengandung kata kunci sama
+    for title, url in items:
+        title_lower = title.lower()
+        match_score = sum(1 for k in keywords if k in title_lower)
+        if match_score > 0:
+            relevant_links.append((title, url))
+    
+    # Jika ada link relevan, ambil max 3
+    if relevant_links:
+        # Prioritaskan yang paling relevan, lalu acak sedikit agar variatif
+        count = min(3, len(relevant_links))
+        return random.sample(relevant_links, count)
+    
+    # Fallback: Ambil random jika belum ada konten relevan
+    count = min(3, len(items))
+    return random.sample(items, count)
+
+def inject_links_into_body(content_body, current_title):
+    links = get_contextual_links(current_title)
+    if not links: return content_body
+
+    link_box = "\n\n> **🚙 Related Topics:**\n"
+    for title, url in links:
+        link_box += f"> - [{title}]({url})\n"
+    link_box += "\n"
+
+    paragraphs = content_body.split('\n\n')
+    if len(paragraphs) < 4: return content_body + link_box
+    insert_pos = random.randint(1, 2) 
+    paragraphs.insert(insert_pos, link_box)
+    return "\n\n".join(paragraphs)
+
+# ==========================================
+# 🚀 INDEXING FUNCTIONS
 # ==========================================
 def submit_to_indexnow(url):
     try:
         endpoint = "https://api.indexnow.org/indexnow"
         host = WEBSITE_URL.replace("https://", "").replace("http://", "")
-        data = {"host": host, "key": INDEXNOW_KEY, "keyLocation": f"https://{host}/{INDEXNOW_KEY}.txt", "urlList": [url]}
-        requests.post(endpoint, json=data, headers={'Content-Type': 'application/json; charset=utf-8'}, timeout=5)
-        print(f"      🚀 IndexNow Log: Submitted {url}")
-    except: pass
+        data = {
+            "host": host, "key": INDEXNOW_KEY,
+            "keyLocation": f"https://{host}/{INDEXNOW_KEY}.txt",
+            "urlList": [url]
+        }
+        requests.post(endpoint, json=data, headers={'Content-Type': 'application/json; charset=utf-8'}, timeout=10)
+        print(f"      🚀 IndexNow Submitted")
+    except Exception as e: print(f"      ⚠️ IndexNow Failed: {e}")
 
 def submit_to_google(url):
     if not GOOGLE_JSON_KEY or not GOOGLE_LIBS_AVAILABLE: return
@@ -243,48 +190,135 @@ def submit_to_google(url):
         service = build("indexing", "v3", credentials=credentials)
         body = {"url": url, "type": "URL_UPDATED"}
         service.urlNotifications().publish(body=body).execute()
-        print(f"      🚀 Google Log: Submitted {url}")
-    except: pass
+        print(f"      🚀 Google Indexing Submitted")
+    except Exception as e: print(f"      ⚠️ Google Indexing Error: {e}")
 
 # ==========================================
-# 🧠 CONTENT ENGINE
+# 🎨 IMAGE GENERATOR (FORCE JEEP STYLE)
+# ==========================================
+def generate_robust_image(prompt, filename):
+    output_path = f"{IMAGE_DIR}/{filename}"
+    forbidden_words = ["sedan", "coupe", "bmw", "mercedes", "toyota", "low car", "sports car", "track car"]
+    clean_prompt = prompt.lower().replace('"', '').replace("'", "")
+    for word in forbidden_words:
+        clean_prompt = clean_prompt.replace(word, "")
+    
+    forced_style = "Jeep Wrangler style SUV, rugged 4x4, boxy off-road vehicle, seven slot grille, lifted suspension, big tires, cinematic automotive photography, realistic 8k"
+    final_prompt = f"{clean_prompt}, {forced_style}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://google.com"
+    }
+
+    print(f"      🎨 Generating Image: {clean_prompt[:30]}...")
+
+    # 1. POLLINATIONS (Priority)
+    try:
+        seed = random.randint(1, 99999)
+        poly_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(final_prompt)}?width=1280&height=720&model=flux&seed={seed}&nologo=true"
+        resp = requests.get(poly_url, headers=headers, timeout=25)
+        if resp.status_code == 200:
+            img = Image.open(BytesIO(resp.content)).convert("RGB")
+            img.save(output_path, "WEBP", quality=90)
+            print("      ✅ Image Saved (Source: Pollinations Flux)")
+            return f"/images/{filename}"
+    except Exception: pass
+
+    # 2. HERCAI (Fallback)
+    try:
+        hercai_url = f"https://hercai.onrender.com/v3/text2image?prompt={requests.utils.quote(final_prompt)}"
+        resp = requests.get(hercai_url, headers=headers, timeout=40)
+        if resp.status_code == 200:
+            data = resp.json()
+            if "url" in data:
+                img_data = requests.get(data["url"], headers=headers, timeout=20).content
+                img = Image.open(BytesIO(img_data)).convert("RGB")
+                img.save(output_path, "WEBP", quality=90)
+                print("      ✅ Image Saved (Source: Hercai AI)")
+                return f"/images/{filename}"
+    except Exception: pass
+
+    # 3. FLICKR (Final Safety)
+    try:
+        flickr_url = f"https://loremflickr.com/1280/720/jeep,wrangler,rubicon/all"
+        resp = requests.get(flickr_url, headers=headers, timeout=20, allow_redirects=True)
+        if resp.status_code == 200:
+            img = Image.open(BytesIO(resp.content)).convert("RGB")
+            img.save(output_path, "WEBP", quality=90)
+            print("      ✅ Image Saved (Source: Real Photo Fallback)")
+            return f"/images/{filename}"
+    except Exception: pass
+
+    return "/images/default-jeep.webp"
+
+# ==========================================
+# 🧠 CONTENT ENGINE (PRO + FAQ SCHEMA)
 # ==========================================
 
 def get_groq_article_json(title, summary, link, author_name):
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    
+    structures = [
+        "TECHNICAL_BREAKDOWN (Deep dive into specs, engine codes, suspension geometry)",
+        "MARKET_IMPACT (How this affects values, competitors like Bronco/4Runner)",
+        "ENTHUSIAST_PERSPECTIVE (Modding potential, trail capability focus)",
+        "HISTORICAL_CONTEXT (Comparing to CJ/YJ/TJ/JK legacy)"
+    ]
+    chosen_structure = random.choice(structures)
+
     system_prompt = f"""
-    You are {author_name}, a Senior Automotive Journalist & SEO Specialist.
-    TASK: Write a comprehensive blog post (1000+ words).
+    You are {author_name}, a veteran automotive journalist and engineer.
+    Current Date: {current_date}.
     
-    ### STRUCTURE:
-    - **H1:** Provided.
-    - **H2 (##):** 3-4 Main Headings.
-    - **H3 (###):** Sub-headings.
-    - **Tables:** Must include a Markdown Table.
-    - **Lists:** Bullet points for features.
+    OBJECTIVE: Write a high-quality, data-rich article about Jeep/Off-road.
+    STRUCTURE STYLE: {chosen_structure}.
     
-    ### OUTPUT JSON KEYS: 
-    - "title", "description", "category", "main_keyword", "tags", "content_body"
+    ✅ MANDATORY REQUIREMENTS (TO BOOST AUTHORITY):
+    1. **DATA TABLE**: Include a Markdown Table (Specs/Pros-Cons).
+    2. **FAQ SECTION**: At the very end, include a '## Frequently Asked Questions' section with 3 common questions related to the topic.
+    3. **VISUAL KEYWORD**: Describe a JEEP vehicle strictly.
+    4. **HIERARCHY**: H2, H3, H4.
     
-    Note: 'main_keyword' should be a short visual description for an image (max 6 words).
+    OUTPUT FORMAT (JSON):
+    {{
+        "title": "Catchy SEO Title",
+        "description": "Meta description (150 chars)",
+        "category": "One of: {', '.join(VALID_CATEGORIES)}",
+        "main_keyword": "Jeep visual prompt...",
+        "tags": ["tag1", "tag2"],
+        "content_body": "Full markdown content..."
+    }}
     """
     
-    user_prompt = f"Topic: {title}\nSummary context: {summary}\nSource Link: {link}"
+    user_prompt = f"""
+    SOURCE MATERIAL:
+    - Headline: {title}
+    - Summary: {summary}
+    - Link: {link}
+    
+    Write now. INCLUDE TABLE + FAQ Section.
+    """
     
     for api_key in GROQ_API_KEYS:
         client = Groq(api_key=api_key)
         try:
-            print(f"      🤖 AI Writing ({author_name})...")
+            print(f"      🤖 AI Writing ({chosen_structure.split()[0]})...")
             completion = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
-                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
                 temperature=0.6,
-                max_tokens=7000,
+                max_tokens=6500,
                 response_format={"type": "json_object"}
             )
             return completion.choices[0].message.content
-        except Exception as e:
-            print(f"      ⚠️ AI Gen Error: {e}")
-            continue
+        except RateLimitError:
+            print("      ⚠️ Rate Limit Hit, switching key...")
+            time.sleep(2)
+        except Exception: pass
     return None
 
 # ==========================================
@@ -295,78 +329,88 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print("🔥 JEEP ENGINE STARTED (BROWSER SPOOFING MODE) 🔥")
+    print("🔥 ENGINE STARTED: VESLIFE AUTHORITY EDITION (SILO + IMAGE FIX)")
 
     for source_name, rss_url in RSS_SOURCES.items():
-        print(f"\n📡 Reading Source: {source_name}")
+        print(f"\n📡 Reading: {source_name}")
         feed = fetch_rss_feed(rss_url)
         if not feed: continue
 
-        processed = 0
+        processed_count = 0
+        
         for entry in feed.entries:
-            if processed >= TARGET_PER_SOURCE: break
+            if processed_count >= TARGET_PER_SOURCE:
+                print(f"   🛑 Target reached for {source_name}")
+                break
             
             clean_title = entry.title.split(" - ")[0]
-            slug = slugify(clean_title, max_length=50, word_boundary=True)
+            slug = slugify(clean_title, max_length=60, word_boundary=True)
             filename = f"{slug}.md"
             
-            if os.path.exists(f"{CONTENT_DIR}/{filename}"): continue
+            if os.path.exists(f"{CONTENT_DIR}/{filename}"): 
+                continue
+            
+            print(f"   ⚡ Processing: {clean_title[:40]}...")
             
             author = random.choice(AUTHOR_PROFILES)
-            
-            # 1. Content
             raw_json = get_groq_article_json(clean_title, entry.summary, entry.link, author)
-            if not raw_json: continue
             
+            if not raw_json: continue
             try:
                 data = json.loads(raw_json)
-                
-                # 2. Image (Generate using curl_cffi)
-                image_keyword = data.get('main_keyword', clean_title)
-                final_img = generate_cartoon_image(image_keyword, f"{slug}.webp")
-                
-                # 3. Save
-                clean_body = clean_ai_content(data['content_body'])
-                links_md = get_internal_links_markdown()
-                final_body = clean_body + "\n\n### Explore More\n" + links_md
-                
-                cat = data.get('category', "Wrangler Life")
-                if cat not in VALID_CATEGORIES: cat = "Wrangler Life"
-                
-                md_content = f"""---
+            except:
+                print("      ❌ JSON Parse Error")
+                continue
+
+            # 1. Generate Image (With Force-Filter)
+            image_prompt = data.get('main_keyword', clean_title)
+            final_img_path = generate_robust_image(image_prompt, f"{slug}.webp")
+            
+            # 2. Clean Content
+            clean_body = clean_ai_content(data['content_body'])
+            
+            # 3. Inject Contextual Links (Siloing)
+            final_body_with_links = inject_links_into_body(clean_body, data['title'])
+            
+            # 4. Fallback Category
+            if data.get('category') not in VALID_CATEGORIES:
+                data['category'] = "Jeep News"
+
+            # 5. Create Markdown File
+            md_content = f"""---
 title: "{data['title'].replace('"', "'")}"
 date: {datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00")}
 author: "{author}"
-categories: ["{cat}"]
+categories: ["{data['category']}"]
 tags: {json.dumps(data.get('tags', []))}
-featured_image: "{final_img}"
+featured_image: "{final_img_path}"
 description: "{data['description'].replace('"', "'")}"
 slug: "{slug}"
 url: "/{slug}/"
+draft: false
+weight: {random.randint(1, 10)}
 ---
 
-{final_body}
+{final_body_with_links}
 
 ---
-*Reference: Automotive analysis by {author} based on news from [{source_name}]({entry.link}).*
+*Reference: Analysis by {author} based on reports from [{source_name}]({entry.link}).*
 """
-                with open(f"{CONTENT_DIR}/{filename}", "w", encoding="utf-8") as f:
-                    f.write(md_content)
-                
-                save_link_to_memory(data['title'], slug)
-                
-                # Indexing
-                full_url = f"{WEBSITE_URL}/{slug}/"
-                submit_to_indexnow(full_url)
-                submit_to_google(full_url)
+            with open(f"{CONTENT_DIR}/{filename}", "w", encoding="utf-8") as f:
+                f.write(md_content)
+            
+            # 6. Save & Index
+            save_link_to_memory(data['title'], slug)
+            
+            full_url = f"{WEBSITE_URL}/articles/{slug}/"
+            submit_to_indexnow(full_url)
+            submit_to_google(full_url)
 
-                print(f"      ✅ Successfully Published: {slug}")
-                processed += 1
-                
-                # Jeda wajib
-                time.sleep(10) 
-            except Exception as e:
-                print(f"      ❌ Critical Error: {e}")
+            print(f"      ✅ Published: {slug}")
+            processed_count += 1
+            
+            print("      💤 Sleeping for 120s (Natural Drip Feed)...")
+            time.sleep(120)
 
 if __name__ == "__main__":
     main()
