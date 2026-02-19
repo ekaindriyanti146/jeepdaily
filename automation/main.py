@@ -36,6 +36,8 @@ INDEXNOW_KEY = "e74819b68a0f40e98f6ec3dc24f610f0"
 GOOGLE_JSON_KEY = os.environ.get("GOOGLE_INDEXING_KEY", "")
 
 if not GROQ_API_KEYS:
+    # Fallback manual jika env variable kosong saat testing
+    # GROQ_API_KEYS = ["gsk_..."] 
     print("❌ FATAL ERROR: Groq API Key is missing!")
     exit(1)
 
@@ -48,10 +50,10 @@ AUTHOR_PROFILES = [
     "Elena Forza (Car Design Analyst)"
 ]
 
-# Kategori Spesifik
+# Kategori Global (Disamakan agar AI dan Code sinkron)
 VALID_CATEGORIES = [
     "Wrangler Life", "Classic Jeeps", "Grand Cherokee", 
-    "Gladiator Truck", "Off-road Tips", "Jeep History", "Maintenance & Mods"
+    "Gladiator Truck", "Off-road Tips", "Jeep History", "Maintenance & Mods", "Jeep News"
 ]
 
 RSS_SOURCES = {
@@ -59,7 +61,7 @@ RSS_SOURCES = {
     "Motor1 Jeep": "https://www.motor1.com/rss/make/jeep/",
     "Mopar Insiders": "https://moparinsiders.com/feed/", 
     "Jeep News": "https://www.autoevolution.com/rss/cars/jeep/",
-     "Jeep Wrangler News": "https://news.google.com/rss/search?q=Jeep+Wrangler+Review+OR+News&hl=en-US&gl=US&ceid=US:en",
+    "Jeep Wrangler News": "https://news.google.com/rss/search?q=Jeep+Wrangler+Review+OR+News&hl=en-US&gl=US&ceid=US:en",
     "Jeep Gladiator": "https://news.google.com/rss/search?q=Jeep+Gladiator+News&hl=en-US&gl=US&ceid=US:en",
     "Classic Jeep History": "https://news.google.com/rss/search?q=Classic+Jeep+Willys+History&hl=en-US&gl=US&ceid=US:en",
     "Offroad Lifestyle": "https://news.google.com/rss/search?q=Offroad+4x4+Adventure&hl=en-US&gl=US&ceid=US:en"
@@ -86,7 +88,6 @@ def save_link_to_memory(title, slug):
     os.makedirs(DATA_DIR, exist_ok=True)
     memory = load_link_memory()
     memory[title] = f"/articles/{slug}" 
-    # Simpan lebih banyak history untuk Silo Linking yang lebih baik
     if len(memory) > 500: memory = dict(list(memory.items())[-500:])
     with open(MEMORY_FILE, 'w') as f: json.dump(memory, f, indent=2)
 
@@ -114,39 +115,42 @@ def clean_ai_content(text):
     text = text.replace("<p>", "").replace("</p>", "\n\n")
     return text.strip()
 
+def extract_json_from_text(text):
+    """Helper untuk mengekstrak JSON valid dari output AI yang kotor"""
+    try:
+        # Cari kurung kurawal pertama dan terakhir
+        start = text.find('{')
+        end = text.rfind('}') + 1
+        if start != -1 and end != -1:
+            json_str = text[start:end]
+            return json.loads(json_str)
+        return None
+    except:
+        return None
+
 # ==========================================
 # 🧠 SMART SILO LINKING (AUTHORITY BOOSTER)
 # ==========================================
 def get_contextual_links(current_title):
-    """
-    Mencari link yang RELEVAN berdasarkan kata kunci di judul.
-    Jika tidak ada yang relevan, baru ambil random.
-    Ini menciptakan struktur 'Silo' yang disukai Google.
-    """
     memory = load_link_memory()
     items = list(memory.items())
     if not items: return []
     
-    # Ekstrak kata kunci sederhana (hapus kata sambung)
-    stop_words = ['the', 'a', 'an', 'in', 'on', 'at', 'for', 'to', 'of', 'and', 'with', 'is', 'jeep'] 
+    stop_words = ['the', 'a', 'an', 'in', 'on', 'at', 'for', 'to', 'of', 'and', 'with', 'is', 'jeep', 'review', 'news'] 
     keywords = [w.lower() for w in current_title.split() if w.lower() not in stop_words and len(w) > 3]
     
     relevant_links = []
     
-    # Cari judul yang mengandung kata kunci sama
     for title, url in items:
         title_lower = title.lower()
         match_score = sum(1 for k in keywords if k in title_lower)
         if match_score > 0:
             relevant_links.append((title, url))
     
-    # Jika ada link relevan, ambil max 3
     if relevant_links:
-        # Prioritaskan yang paling relevan, lalu acak sedikit agar variatif
         count = min(3, len(relevant_links))
         return random.sample(relevant_links, count)
     
-    # Fallback: Ambil random jika belum ada konten relevan
     count = min(3, len(items))
     return random.sample(items, count)
 
@@ -203,7 +207,7 @@ def generate_robust_image(prompt, filename):
     for word in forbidden_words:
         clean_prompt = clean_prompt.replace(word, "")
     
-    forced_style = "Jeep Wrangler style SUV, rugged 4x4, boxy off-road vehicle, seven slot grille, lifted suspension, big tires, cinematic automotive photography, realistic 8k"
+    forced_style = "Jeep Wrangler style SUV, rugged 4x4, boxy off-road vehicle, seven slot grille, lifted suspension, big tires, cinematic automotive photography, realistic 8k, hdr"
     final_prompt = f"{clean_prompt}, {forced_style}"
     
     headers = {
@@ -220,7 +224,7 @@ def generate_robust_image(prompt, filename):
         resp = requests.get(poly_url, headers=headers, timeout=25)
         if resp.status_code == 200:
             img = Image.open(BytesIO(resp.content)).convert("RGB")
-            img.save(output_path, "WEBP", quality=90)
+            img.save(output_path, "WEBP", quality=85)
             print("      ✅ Image Saved (Source: Pollinations Flux)")
             return f"/images/{filename}"
     except Exception: pass
@@ -234,18 +238,20 @@ def generate_robust_image(prompt, filename):
             if "url" in data:
                 img_data = requests.get(data["url"], headers=headers, timeout=20).content
                 img = Image.open(BytesIO(img_data)).convert("RGB")
-                img.save(output_path, "WEBP", quality=90)
+                img.save(output_path, "WEBP", quality=85)
                 print("      ✅ Image Saved (Source: Hercai AI)")
                 return f"/images/{filename}"
     except Exception: pass
 
     # 3. FLICKR (Final Safety)
     try:
-        flickr_url = f"https://loremflickr.com/1280/720/jeep,wrangler,rubicon/all"
+        # Menggunakan tag random jeep untuk variasi
+        tags = random.choice(["jeep wrangler", "jeep rubicon", "jeep gladiator", "offroad 4x4"])
+        flickr_url = f"https://loremflickr.com/1280/720/{tags.replace(' ', ',')}/all"
         resp = requests.get(flickr_url, headers=headers, timeout=20, allow_redirects=True)
         if resp.status_code == 200:
             img = Image.open(BytesIO(resp.content)).convert("RGB")
-            img.save(output_path, "WEBP", quality=90)
+            img.save(output_path, "WEBP", quality=85)
             print("      ✅ Image Saved (Source: Real Photo Fallback)")
             return f"/images/{filename}"
     except Exception: pass
@@ -253,57 +259,66 @@ def generate_robust_image(prompt, filename):
     return "/images/default-jeep.webp"
 
 # ==========================================
-# 🧠 CONTENT ENGINE (PRO + FAQ SCHEMA)
-# ==========================================
+# 🚙 JEEP CONTENT ENGINE (1500 WORDS + NO AI DISCLAIMER)
+# ========================================== 
 
-def get_groq_article_json(title, summary, link, author_name):
+def get_groq_jeep_article_json(title, summary, link, author_name):
     current_date = datetime.now().strftime("%Y-%m-%d")
     
     structures = [
-        "TECHNICAL_BREAKDOWN (Deep dive into specs, engine codes, suspension geometry)",
-        "MARKET_IMPACT (How this affects values, competitors like Bronco/4Runner)",
-        "ENTHUSIAST_PERSPECTIVE (Modding potential, trail capability focus)",
-        "HISTORICAL_CONTEXT (Comparing to CJ/YJ/TJ/JK legacy)"
+        "OFF_ROAD_PERFORMANCE_REVIEW (Cover: Trail Rated Badge, 4x4 Systems, Articulation, Suspension Tech, Real-world Trail Test)",
+        "MODEL_EVOLUTION_HISTORY (Cover: Heritage/Legacy, Design Evolution from CJ/Wrangler, Engine Updates, Collector Value)",
+        "TECHNICAL_SPEC_DEEP_DIVE (Cover: Powertrain Analysis, Aftermarket Potential, Axle/Gear Ratios, Towing Capacity, Competitor Comparison)"
     ]
     chosen_structure = random.choice(structures)
 
+    # Menggunakan List Global agar sinkron
+    categories_str = ", ".join(VALID_CATEGORIES)
+
     system_prompt = f"""
-    You are {author_name}, a veteran automotive journalist and engineer.
+    You are {author_name}, a seasoned automotive journalist and Jeep specialist with decades of off-road experience.
     Current Date: {current_date}.
     
-    OBJECTIVE: Write a high-quality, data-rich article about Jeep/Off-road.
+    OBJECTIVE: Write a **DEEP DIVE, LONG-FORM (1500+ Words)** automotive analysis about Jeep.
+    TARGET AUDIENCE: Jeep Enthusiasts, Off-roaders, Car Buyers, and Mechanics.
     STRUCTURE STYLE: {chosen_structure}.
     
-    ✅ MANDATORY REQUIREMENTS (TO BOOST AUTHORITY):
-    1. **DATA TABLE**: Include a Markdown Table (Specs/Pros-Cons).
-    2. **FAQ SECTION**: At the very end, include a '## Frequently Asked Questions' section with 3 common questions related to the topic.
-    3. **VISUAL KEYWORD**: Describe a JEEP vehicle strictly.
-    4. **HIERARCHY**: H2, H3, H4.
+    🚫 NEGATIVE CONSTRAINTS (CRITICAL):
+    1. **NO DISCLAIMERS**: DO NOT write a disclaimer at the end.
+    2. **NO GENERIC HEADERS**: Do NOT use "Introduction", "Conclusion", "Summary". Start straight with the engine roar.
+    3. **NO FLUFF**: Do not repeat the same point. Expand by adding historical context, mechanical details, or modification advice.
+    
+    ✅ MANDATORY REQUIREMENTS:
+    1. **LENGTH**: The article MUST be comprehensive (aim for 1200-1500 words). Use multiple sub-sections.
+    2. **DATA TABLE**: You MUST include a detailed Markdown Table (e.g., **Technical Specs: HP, Torque, Ground Clearance, Approach/Departure Angles**).
+    3. **HIERARCHY**: Use H2 (##) for major sections, H3 (###) for technical breakdown, and H4 (####) for specific parts.
+    4. **FAQ**: Add a "Frequently Asked Questions" section at the very end with 3 technical questions (e.g., about death wobble, lockers, or lift kits).
+    5. **VISUAL KEYWORD**: Describe a specific dramatic scene of the Jeep for the image generator (e.g., rock crawling in Moab).
     
     OUTPUT FORMAT (JSON):
     {{
-        "title": "Catchy SEO Title",
-        "description": "Meta description (150 chars)",
-        "category": "One of: {', '.join(VALID_CATEGORIES)}",
-        "main_keyword": "Jeep visual prompt...",
-        "tags": ["tag1", "tag2"],
-        "content_body": "Full markdown content..."
+        "title": "Rugged, Click-Worthy Automotive Headline",
+        "description": "SEO Meta description (150 chars) focusing on specs/performance",
+        "category": "One of: {categories_str}",
+        "main_keyword": "Visual prompt description...",
+        "tags": ["Jeep", "Wrangler", "Off-Road", "4x4", "specific_model"],
+        "content_body": "The full long-form markdown content..."
     }}
     """
     
     user_prompt = f"""
     SOURCE MATERIAL:
-    - Headline: {title}
-    - Summary: {summary}
-    - Link: {link}
+    - Topic/Vehicle: {title}
+    - Key Details: {summary}
+    - Reference Link: {link}
     
-    Write now. INCLUDE TABLE + FAQ Section.
+    Write the 1500-word Jeep analysis now. Respond ONLY in valid JSON.
     """
     
     for api_key in GROQ_API_KEYS:
         client = Groq(api_key=api_key)
         try:
-            print(f"      🤖 AI Writing ({chosen_structure.split()[0]})...")
+            print(f"      🚙 Jeep AI Writing ({chosen_structure.split()[0]} - Long Form)...")
             completion = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[
@@ -311,14 +326,16 @@ def get_groq_article_json(title, summary, link, author_name):
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.6,
-                max_tokens=6500,
+                max_tokens=7500,
                 response_format={"type": "json_object"}
             )
             return completion.choices[0].message.content
         except RateLimitError:
             print("      ⚠️ Rate Limit Hit, switching key...")
             time.sleep(2)
-        except Exception: pass
+        except Exception as e:
+            print(f"      ❌ Error: {e}")
+            pass
     return None
 
 # ==========================================
@@ -329,7 +346,7 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print("🔥 ENGINE STARTED: VESLIFE AUTHORITY EDITION (SILO + IMAGE FIX)")
+    print("🔥 ENGINE STARTED: VESLIFE JEEP EDITION (SILO + IMAGE FIX)")
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Reading: {source_name}")
@@ -353,13 +370,16 @@ def main():
             print(f"   ⚡ Processing: {clean_title[:40]}...")
             
             author = random.choice(AUTHOR_PROFILES)
-            raw_json = get_groq_article_json(clean_title, entry.summary, entry.link, author)
             
-            if not raw_json: continue
-            try:
-                data = json.loads(raw_json)
-            except:
-                print("      ❌ JSON Parse Error")
+            # --- FIX: Menggunakan nama fungsi yang BENAR ---
+            raw_json_str = get_groq_jeep_article_json(clean_title, entry.summary, entry.link, author)
+            
+            if not raw_json_str: continue
+            
+            # --- FIX: Ekstraksi JSON yang lebih aman ---
+            data = extract_json_from_text(raw_json_str)
+            if not data:
+                print("      ❌ JSON Parse Error / Invalid Output")
                 continue
 
             # 1. Generate Image (With Force-Filter)
@@ -372,16 +392,17 @@ def main():
             # 3. Inject Contextual Links (Siloing)
             final_body_with_links = inject_links_into_body(clean_body, data['title'])
             
-            # 4. Fallback Category
-            if data.get('category') not in VALID_CATEGORIES:
-                data['category'] = "Jeep News"
+            # 4. Fallback Category Checking
+            cat = data.get('category', 'Jeep News')
+            # Jika kategori dari AI tidak ada di list valid, paksa jadi Jeep News
+            final_category = cat if cat in VALID_CATEGORIES else "Jeep News"
 
             # 5. Create Markdown File
             md_content = f"""---
 title: "{data['title'].replace('"', "'")}"
 date: {datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00")}
 author: "{author}"
-categories: ["{data['category']}"]
+categories: ["{final_category}"]
 tags: {json.dumps(data.get('tags', []))}
 featured_image: "{final_img_path}"
 description: "{data['description'].replace('"', "'")}"
@@ -396,21 +417,24 @@ weight: {random.randint(1, 10)}
 ---
 *Reference: Analysis by {author} based on reports from [{source_name}]({entry.link}).*
 """
-            with open(f"{CONTENT_DIR}/{filename}", "w", encoding="utf-8") as f:
-                f.write(md_content)
-            
-            # 6. Save & Index
-            save_link_to_memory(data['title'], slug)
-            
-            full_url = f"{WEBSITE_URL}/articles/{slug}/"
-            submit_to_indexnow(full_url)
-            submit_to_google(full_url)
+            try:
+                with open(f"{CONTENT_DIR}/{filename}", "w", encoding="utf-8") as f:
+                    f.write(md_content)
+                
+                # 6. Save & Index
+                save_link_to_memory(data['title'], slug)
+                
+                full_url = f"{WEBSITE_URL}/articles/{slug}/"
+                submit_to_indexnow(full_url)
+                submit_to_google(full_url)
 
-            print(f"      ✅ Published: {slug}")
-            processed_count += 1
-            
-            print("      💤 Sleeping for 120s (Natural Drip Feed)...")
-            time.sleep(120)
+                print(f"      ✅ Published: {slug}")
+                processed_count += 1
+                
+                print("      💤 Sleeping for 120s (Natural Drip Feed)...")
+                time.sleep(120)
+            except Exception as e:
+                print(f"      ❌ File Write Error: {e}")
 
 if __name__ == "__main__":
     main()
