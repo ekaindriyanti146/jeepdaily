@@ -25,7 +25,7 @@ except ImportError:
     GOOGLE_LIBS_AVAILABLE = False
 
 # ==========================================
-# ⚙️ CONFIGURATION & SETUP (VESLIFE / JEEP NICHE)
+# ⚙️ CONFIGURATION & SETUP (JEEP / OFF-ROAD NICHE)
 # ==========================================
 
 GROQ_KEYS_RAW = os.environ.get("GROQ_API_KEY", "") 
@@ -36,8 +36,6 @@ INDEXNOW_KEY = "e74819b68a0f40e98f6ec3dc24f610f0"
 GOOGLE_JSON_KEY = os.environ.get("GOOGLE_INDEXING_KEY", "")
 
 if not GROQ_API_KEYS:
-    # Fallback manual jika env variable kosong saat testing
-    # GROQ_API_KEYS = ["gsk_..."] 
     print("❌ FATAL ERROR: Groq API Key is missing!")
     exit(1)
 
@@ -50,7 +48,7 @@ AUTHOR_PROFILES = [
     "Elena Forza (Car Design Analyst)"
 ]
 
-# Kategori Global (Disamakan agar AI dan Code sinkron)
+# Kategori Global
 VALID_CATEGORIES = [
     "Wrangler Life", "Classic Jeeps", "Grand Cherokee", 
     "Gladiator Truck", "Off-road Tips", "Jeep History", "Maintenance & Mods", "Jeep News"
@@ -72,12 +70,26 @@ IMAGE_DIR = "static/images"
 DATA_DIR = "automation/data"
 MEMORY_FILE = f"{DATA_DIR}/link_memory.json"
 
-# 🔥 TARGET: 2 Artikel per sumber per run
+# 🔥 TARGET: 1 Artikel per sumber per run
 TARGET_PER_SOURCE = 1
 
 # ==========================================
-# 🧠 HELPER FUNCTIONS
+# 🧠 HELPER FUNCTIONS (ROBUST)
 # ==========================================
+def safe_request(url, retries=3):
+    """Fungsi request anti-gagal dengan retry logic"""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    for i in range(retries):
+        try:
+            response = requests.get(url, headers=headers, timeout=20)
+            if response.status_code == 200:
+                return response
+        except requests.RequestException:
+            time.sleep(2)
+    return None
+
 def load_link_memory():
     if not os.path.exists(MEMORY_FILE): return {}
     try:
@@ -92,12 +104,12 @@ def save_link_to_memory(title, slug):
     with open(MEMORY_FILE, 'w') as f: json.dump(memory, f, indent=2)
 
 def fetch_rss_feed(url):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
     try:
-        response = requests.get(url, headers=headers, timeout=15)
-        return feedparser.parse(response.content) if response.status_code == 200 else None
+        # Menggunakan safe_request untuk mengambil XML
+        response = safe_request(url)
+        if response:
+            return feedparser.parse(response.content)
+        return None
     except: return None
 
 def clean_ai_content(text):
@@ -106,6 +118,9 @@ def clean_ai_content(text):
     text = re.sub(r'\n```$', '', text)
     text = text.replace("```", "")
     text = re.sub(r'^##\s*(Introduction|Conclusion|Summary|The Verdict|Final Thoughts|In Conclusion)\s*\n', '', text, flags=re.MULTILINE|re.IGNORECASE)
+    
+    # Hapus TOC bawaan AI karena kita buat sendiri
+    text = re.sub(r'(?i)^##\s*Table of Contents.*?\n', '', text, flags=re.MULTILINE)
     
     text = text.replace("<h1>", "# ").replace("</h1>", "\n")
     text = text.replace("<h2>", "## ").replace("</h2>", "\n")
@@ -116,20 +131,42 @@ def clean_ai_content(text):
     return text.strip()
 
 def extract_json_from_text(text):
-    """Helper untuk mengekstrak JSON valid dari output AI yang kotor"""
     try:
-        # Cari kurung kurawal pertama dan terakhir
         start = text.find('{')
         end = text.rfind('}') + 1
         if start != -1 and end != -1:
             json_str = text[start:end]
             return json.loads(json_str)
         return None
-    except:
-        return None
+    except: return None
+
+def generate_toc(text):
+    """
+    Membuat Table of Contents otomatis dari Header ## dan ###
+    """
+    lines = text.split('\n')
+    toc = ["\n## 📋 Table of Contents\n"]
+    has_headers = False
+    
+    for line in lines:
+        if line.startswith("## "):
+            title = line.replace("## ", "").strip()
+            anchor = slugify(title) 
+            toc.append(f"- [{title}](#{anchor})")
+            has_headers = True
+        elif line.startswith("### "):
+            title = line.replace("### ", "").strip()
+            anchor = slugify(title)
+            toc.append(f"  - [{title}](#{anchor})")
+            has_headers = True
+            
+    if not has_headers:
+        return ""
+        
+    return "\n".join(toc) + "\n\n---\n\n"
 
 # ==========================================
-# 🧠 SMART SILO LINKING (AUTHORITY BOOSTER)
+# 🧠 SMART SILO LINKING
 # ==========================================
 def get_contextual_links(current_title):
     memory = load_link_memory()
@@ -143,16 +180,13 @@ def get_contextual_links(current_title):
     
     for title, url in items:
         title_lower = title.lower()
-        match_score = sum(1 for k in keywords if k in title_lower)
-        if match_score > 0:
+        if sum(1 for k in keywords if k in title_lower) > 0:
             relevant_links.append((title, url))
     
     if relevant_links:
-        count = min(3, len(relevant_links))
-        return random.sample(relevant_links, count)
+        return random.sample(relevant_links, min(3, len(relevant_links)))
     
-    count = min(3, len(items))
-    return random.sample(items, count)
+    return random.sample(items, min(3, len(items)))
 
 def inject_links_into_body(content_body, current_title):
     links = get_contextual_links(current_title)
@@ -164,8 +198,10 @@ def inject_links_into_body(content_body, current_title):
     link_box += "\n"
 
     paragraphs = content_body.split('\n\n')
-    if len(paragraphs) < 4: return content_body + link_box
-    insert_pos = random.randint(1, 2) 
+    if len(paragraphs) < 5: return content_body + link_box
+    
+    # Inject di tengah agar tidak mengganggu TOC
+    insert_pos = max(2, int(len(paragraphs) / 3))
     paragraphs.insert(insert_pos, link_box)
     return "\n\n".join(paragraphs)
 
@@ -198,57 +234,42 @@ def submit_to_google(url):
     except Exception as e: print(f"      ⚠️ Google Indexing Error: {e}")
 
 # ==========================================
-# 🎨 IMAGE GENERATOR (FORCE JEEP STYLE)
+# 🎨 IMAGE GENERATOR (NO POLLINATIONS - ROBUST VERSION)
 # ==========================================
 def generate_robust_image(prompt, filename):
     output_path = f"{IMAGE_DIR}/{filename}"
-    forbidden_words = ["sedan", "coupe", "bmw", "mercedes", "toyota", "low car", "sports car", "track car"]
-    clean_prompt = prompt.lower().replace('"', '').replace("'", "")
-    for word in forbidden_words:
-        clean_prompt = clean_prompt.replace(word, "")
     
-    forced_style = "Jeep Wrangler style SUV, rugged 4x4, boxy off-road vehicle, seven slot grille, lifted suspension, big tires, cinematic automotive photography, realistic 8k, hdr"
-    final_prompt = f"{clean_prompt}, {forced_style}"
+    # Bersihkan prompt
+    forbidden_words = ["sedan", "coupe", "bmw", "mercedes", "toyota", "low car", "sports car"]
+    clean_prompt = prompt.lower().replace('"', '').replace("'", "")[:200]
+    for word in forbidden_words: clean_prompt = clean_prompt.replace(word, "")
     
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://google.com"
-    }
-
+    # Paksa style Jeep
+    final_prompt = f"{clean_prompt}, Jeep Wrangler style, rugged off-road 4x4, cinematic lighting, realistic, 4k"
+    
     print(f"      🎨 Generating Image: {clean_prompt[:30]}...")
 
-    # 1. POLLINATIONS (Priority)
+    # 1. HERCAI (Model Prodia/v3) - Lebih Realistis
     try:
-        seed = random.randint(1, 99999)
-        poly_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(final_prompt)}?width=1280&height=720&model=flux&seed={seed}&nologo=true"
-        resp = requests.get(poly_url, headers=headers, timeout=25)
-        if resp.status_code == 200:
-            img = Image.open(BytesIO(resp.content)).convert("RGB")
-            img.save(output_path, "WEBP", quality=85)
-            print("      ✅ Image Saved (Source: Pollinations Flux)")
-            return f"/images/{filename}"
-    except Exception: pass
-
-    # 2. HERCAI (Fallback)
-    try:
+        # Menggunakan endpoint text2image Hercai
         hercai_url = f"https://hercai.onrender.com/v3/text2image?prompt={requests.utils.quote(final_prompt)}"
-        resp = requests.get(hercai_url, headers=headers, timeout=40)
+        resp = requests.get(hercai_url, timeout=40)
         if resp.status_code == 200:
             data = resp.json()
             if "url" in data:
-                img_data = requests.get(data["url"], headers=headers, timeout=20).content
+                img_data = requests.get(data["url"], timeout=20).content
                 img = Image.open(BytesIO(img_data)).convert("RGB")
                 img.save(output_path, "WEBP", quality=85)
                 print("      ✅ Image Saved (Source: Hercai AI)")
                 return f"/images/{filename}"
     except Exception: pass
 
-    # 3. FLICKR (Final Safety)
+    # 2. FLICKR REAL PHOTOS (Fallback Paling Stabil & Bagus untuk Mobil)
+    # Kita cari gambar asli mobil Jeep, bukan AI. Google lebih suka ini.
     try:
-        # Menggunakan tag random jeep untuk variasi
-        tags = random.choice(["jeep wrangler", "jeep rubicon", "jeep gladiator", "offroad 4x4"])
+        tags = random.choice(["jeep wrangler", "jeep rubicon", "jeep offroad", "jeep gladiator"])
         flickr_url = f"https://loremflickr.com/1280/720/{tags.replace(' ', ',')}/all"
-        resp = requests.get(flickr_url, headers=headers, timeout=20, allow_redirects=True)
+        resp = requests.get(flickr_url, timeout=20, allow_redirects=True)
         if resp.status_code == 200:
             img = Image.open(BytesIO(resp.content)).convert("RGB")
             img.save(output_path, "WEBP", quality=85)
@@ -256,10 +277,11 @@ def generate_robust_image(prompt, filename):
             return f"/images/{filename}"
     except Exception: pass
 
+    # 3. Default jika semua gagal
     return "/images/default-jeep.webp"
 
 # ==========================================
-# 🚙 JEEP CONTENT ENGINE (1500 WORDS + NO AI DISCLAIMER)
+# 🚙 JEEP CONTENT ENGINE (LOGIC)
 # ========================================== 
 
 def get_groq_jeep_article_json(title, summary, link, author_name):
@@ -272,7 +294,6 @@ def get_groq_jeep_article_json(title, summary, link, author_name):
     ]
     chosen_structure = random.choice(structures)
 
-    # Menggunakan List Global agar sinkron
     categories_str = ", ".join(VALID_CATEGORIES)
 
     system_prompt = f"""
@@ -292,8 +313,8 @@ def get_groq_jeep_article_json(title, summary, link, author_name):
     1. **LENGTH**: The article MUST be comprehensive (aim for 1200-1500 words). Use multiple sub-sections.
     2. **DATA TABLE**: You MUST include a detailed Markdown Table (e.g., **Technical Specs: HP, Torque, Ground Clearance, Approach/Departure Angles**).
     3. **HIERARCHY**: Use H2 (##) for major sections, H3 (###) for technical breakdown, and H4 (####) for specific parts.
-    4. **FAQ**: Add a "Frequently Asked Questions" section at the very end with 3 technical questions (e.g., about death wobble, lockers, or lift kits).
-    5. **VISUAL KEYWORD**: Describe a specific dramatic scene of the Jeep for the image generator (e.g., rock crawling in Moab).
+    4. **FAQ**: Add a "Frequently Asked Questions" section at the very end with 3 technical questions.
+    5. **VISUAL KEYWORD**: Describe a specific dramatic scene of the Jeep for the image generator.
     
     OUTPUT FORMAT (JSON):
     {{
@@ -308,9 +329,9 @@ def get_groq_jeep_article_json(title, summary, link, author_name):
     
     user_prompt = f"""
     SOURCE MATERIAL:
-    - Topic/Vehicle: {title}
-    - Key Details: {summary}
-    - Reference Link: {link}
+    - Topic: {title}
+    - Details: {summary}
+    - Link: {link}
     
     Write the 1500-word Jeep analysis now. Respond ONLY in valid JSON.
     """
@@ -346,7 +367,7 @@ def main():
     os.makedirs(IMAGE_DIR, exist_ok=True)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    print("🔥 ENGINE STARTED: VESLIFE JEEP EDITION (SILO + IMAGE FIX)")
+    print("🔥 ENGINE STARTED: JEEP EDITION (ROBUST + NO POLLINATIONS + TOC)")
 
     for source_name, rss_url in RSS_SOURCES.items():
         print(f"\n📡 Reading: {source_name}")
@@ -371,33 +392,35 @@ def main():
             
             author = random.choice(AUTHOR_PROFILES)
             
-            # --- FIX: Menggunakan nama fungsi yang BENAR ---
+            # Request ke AI
             raw_json_str = get_groq_jeep_article_json(clean_title, entry.summary, entry.link, author)
             
             if not raw_json_str: continue
             
-            # --- FIX: Ekstraksi JSON yang lebih aman ---
             data = extract_json_from_text(raw_json_str)
             if not data:
                 print("      ❌ JSON Parse Error / Invalid Output")
                 continue
 
-            # 1. Generate Image (With Force-Filter)
+            # 1. Generate Image (Tanpa Pollinations)
             image_prompt = data.get('main_keyword', clean_title)
             final_img_path = generate_robust_image(image_prompt, f"{slug}.webp")
             
             # 2. Clean Content
             clean_body = clean_ai_content(data['content_body'])
             
-            # 3. Inject Contextual Links (Siloing)
-            final_body_with_links = inject_links_into_body(clean_body, data['title'])
+            # 3. Generate Table of Contents (TOC) - BENAR
+            toc_content = generate_toc(clean_body)
+            body_with_toc = toc_content + clean_body
+
+            # 4. Inject Silo Links (Ke Body yang sudah ada TOC)
+            final_body_with_links = inject_links_into_body(body_with_toc, data['title'])
             
-            # 4. Fallback Category Checking
+            # 5. Kategori Validation
             cat = data.get('category', 'Jeep News')
-            # Jika kategori dari AI tidak ada di list valid, paksa jadi Jeep News
             final_category = cat if cat in VALID_CATEGORIES else "Jeep News"
 
-            # 5. Create Markdown File
+            # 6. Create Markdown File
             md_content = f"""---
 title: "{data['title'].replace('"', "'")}"
 date: {datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00")}
@@ -421,7 +444,7 @@ weight: {random.randint(1, 10)}
                 with open(f"{CONTENT_DIR}/{filename}", "w", encoding="utf-8") as f:
                     f.write(md_content)
                 
-                # 6. Save & Index
+                # 7. Save & Index
                 save_link_to_memory(data['title'], slug)
                 
                 full_url = f"{WEBSITE_URL}/articles/{slug}/"
@@ -431,8 +454,8 @@ weight: {random.randint(1, 10)}
                 print(f"      ✅ Published: {slug}")
                 processed_count += 1
                 
-                print("      💤 Sleeping for 120s (Natural Drip Feed)...")
-                time.sleep(120)
+                print("      💤 Sleeping for 60s (Safety Delay)...")
+                time.sleep(60)
             except Exception as e:
                 print(f"      ❌ File Write Error: {e}")
 
